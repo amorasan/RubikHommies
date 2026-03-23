@@ -401,7 +401,6 @@
     <button class="active" onclick="showPage('rankings')">Rankings</button>
     <button onclick="showPage('manual')">Subir tiempo</button>
     <button onclick="showPage('timer')">Cronómetro</button>
-    <button onclick="showPage('config')">Configurar</button>
   </nav>
 </header>
 
@@ -535,7 +534,6 @@
     <div class="page-title">Rankings</div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
       <div class="filter-row" id="filter-row">
-        <button class="filter-btn active" onclick="setFilter('all')" data-filter="all">Todas</button>
         <!-- dynamic cat filters added by JS -->
       </div>
       <button class="filter-btn" onclick="loadRankings()" id="btn-refresh">
@@ -553,30 +551,7 @@
 </div>
 
 
-<!-- ═══════════════════════════════════════
-     PAGE: CONFIG
-     ═══════════════════════════════════════ -->
-<div id="page-config" class="page">
-  <div class="page-title" style="margin-bottom:24px">Configuración</div>
 
-  <div class="card config-card">
-    <div class="config-info">
-      <strong style="color:var(--text)">La base de datos ya está preconfigurada.</strong><br><br>
-      Solo necesitas introducir la <strong style="color:var(--text)">Anon Key</strong> de Supabase para activar la conexión.<br><br>
-      Encuéntrala en: <strong style="color:var(--text)">supabase.com → tu proyecto → Settings → API Keys → Legacy anon key</strong><br><br>
-      La clave empieza por <code>eyJ...</code> Se guarda en tu navegador y no es visible para otros usuarios.
-    </div>
-
-    <div class="config-field">
-      <label class="config-label">Supabase Anon Key</label>
-      <input type="text" id="cfg-key" class="config-input"
-             placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
-    </div>
-    <button class="btn-primary" onclick="saveConfig()">Guardar clave</button>
-
-    <div id="cfg-status" style="margin-top:14px;font-size:0.85rem;"></div>
-  </div>
-</div>
 
 </main>
 </div><!-- #app -->
@@ -670,24 +645,10 @@ let playerName   = '';
    SUPABASE CONFIG — hardcodeado para todos los usuarios
    ═══════════════════════════════════════════════════ */
 const SB_URL = 'https://nqbxrkxyynzjmntmwzdw.supabase.co';
-const SB_KEY = localStorage.getItem('sb_key') || '';
+const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5xYnhya3h5eW56am1udG13emR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQyOTc0NTAsImV4cCI6MjA4OTg3MzQ1MH0.Tj7i6PfCsG6Rf6ad96Bn7jhF9HG3uONHmtggdYJQxJA';
 
 function getConfig() {
-  return { url: SB_URL, key: localStorage.getItem('sb_key') || '' };
-}
-function saveConfig() {
-  const key = document.getElementById('cfg-key').value.trim();
-  if(!key) { toast('Pega la Anon Key','error'); return; }
-  localStorage.setItem('sb_key', key);
-  toast('Clave guardada ✓','success');
-  document.getElementById('cfg-status').innerHTML =
-    '<span style="color:var(--success)">✓ Clave guardada</span>';
-}
-function loadConfigFields() {
-  const k = localStorage.getItem('sb_key') || '';
-  document.getElementById('cfg-key').value = k;
-  if(k) document.getElementById('cfg-status').innerHTML =
-    '<span style="color:var(--success)">✓ Clave cargada</span>';
+  return { url: SB_URL, key: SB_KEY };
 }
 
 /* ═══════════════════════════════════════════════════
@@ -865,11 +826,6 @@ function togglePenalty(p) {
 
 async function saveTime() {
   const btn = document.getElementById('btn-save');
-  const {key} = getConfig();
-  if(!key) {
-    toast('Introduce la Anon Key en Configurar','error');
-    showPage('config'); return;
-  }
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   const finalMs = penalty === '+2' ? lastTime_ms + 2000 : lastTime_ms;
@@ -985,12 +941,6 @@ async function submitManual() {
   const finalMs = isDNF ? 0 : parsed.ms;
   const penStr  = isDNF ? 'DNF' : 'OK';
 
-  const {key} = getConfig();
-  if(!key) {
-    status.innerHTML = '<span style="color:var(--accent2)">Configura la Anon Key primero</span>';
-    showPage('config'); return;
-  }
-
   const btn = document.getElementById('man-btn-save');
   btn.disabled = true; btn.textContent = 'Guardando…';
   status.textContent = '';
@@ -1071,11 +1021,10 @@ function setFilter(cat) {
 
 function buildFilterRow() {
   const row = document.getElementById('filter-row');
-  const extra = CATEGORIES.map(c =>
-    `<button class="filter-btn" onclick="setFilter('${c}')" data-filter="${c}">${c}</button>`
+  row.innerHTML = CATEGORIES.map((c, i) =>
+    `<button class="filter-btn${i===0?' active':''}" onclick="setFilter('${c}')" data-filter="${c}">${c}</button>`
   ).join('');
-  row.innerHTML =
-    `<button class="filter-btn active" onclick="setFilter('all')" data-filter="all">Todas</button>` + extra;
+  currentFilter = CATEGORIES[0];
 }
 
 async function loadRankings() {
@@ -1086,17 +1035,8 @@ async function loadRankings() {
   const el = document.getElementById('rankings-content');
   const {key} = getConfig();
 
-  if(!key) {
-    el.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">⚙️</div>
-      <div>Introduce la Anon Key en la pestaña <strong>Configurar</strong></div>
-    </div>`;
-    btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
-    return;
-  }
-
   try {
-    const rows = await sbSelect(currentFilter === 'all' ? null : currentFilter);
+    const rows = await sbSelect(currentFilter);
 
     if(!rows.length) {
       el.innerHTML = `<div class="empty-state">
@@ -1129,7 +1069,6 @@ async function loadRankings() {
       <thead><tr>
         <th>#</th>
         <th>Jugador</th>
-        ${currentFilter==='all'?'<th>Categoría</th>':''}
         <th>Tiempo</th>
         <th>Fecha</th>
         <th></th>
@@ -1144,7 +1083,6 @@ async function loadRankings() {
       html += `<tr>
         <td><span class="rank-badge ${rankClass}">${i+1}</span></td>
         <td><strong>${esc(row.nombre)}</strong></td>
-        ${currentFilter==='all'?`<td><span class="cat-tag">${esc(row.categoria)}</span></td>`:''}
         <td><span class="time-cell ${rankClass} ${isDNF?'dnf':''}">${timeStr}</span></td>
         <td class="date-cell">${date}</td>
         <td><button onclick="deleteTime(${row.id})" title="Borrar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:6px;transition:all 0.15s" onmouseover="this.style.color='var(--accent2)'" onmouseout="this.style.color='var(--muted)'">✕</button></td>
@@ -1187,12 +1125,11 @@ function esc(s) {
 function showPage(id) {
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.getElementById('page-'+id).classList.add('active');
-  const pages = ['rankings','manual','timer','config'];
+  const pages = ['rankings','manual','timer'];
   document.querySelectorAll('nav button').forEach((b,i)=>{
     b.classList.toggle('active', pages[i]===id);
   });
   if(id==='rankings') loadRankings();
-  if(id==='config')   loadConfigFields();
   if(id==='manual')   initManualPage();
 }
 
@@ -1215,7 +1152,6 @@ buildCatGrid();
 buildFilterRow();
 loadPlayerName();
 checkReadyState();
-loadConfigFields();
 setTimeout(initManualPage, 0);
 loadRankings();
 </script>
