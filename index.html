@@ -509,15 +509,6 @@
         <div id="man-preview" style="margin-top:8px;font-family:var(--font-mono);font-size:1.3rem;font-weight:700;color:var(--accent);min-height:28px"></div>
       </div>
 
-      <div class="config-field">
-        <label class="config-label">Penalización</label>
-        <div style="display:flex;gap:8px">
-          <button class="penalty-btn" id="man-btn-ok"   onclick="setManPenalty('OK')"  style="flex:1" >OK</button>
-          <button class="penalty-btn" id="man-btn-plus2" onclick="setManPenalty('+2')" style="flex:1">+2</button>
-          <button class="penalty-btn" id="man-btn-dnf"   onclick="setManPenalty('DNF')" style="flex:1">DNF</button>
-        </div>
-      </div>
-
       <button class="btn-save" id="man-btn-save" onclick="submitManual()" style="margin-top:4px">
         Guardar tiempo
       </button>
@@ -566,42 +557,22 @@
      PAGE: CONFIG
      ═══════════════════════════════════════ -->
 <div id="page-config" class="page">
-  <div class="page-title" style="margin-bottom:24px">Configuración de Supabase</div>
+  <div class="page-title" style="margin-bottom:24px">Configuración</div>
 
   <div class="card config-card">
     <div class="config-info">
-      <strong style="color:var(--text)">Cómo configurar Supabase (gratis):</strong><br><br>
-      1. Crea una cuenta en <a href="https://supabase.com" target="_blank">supabase.com</a><br>
-      2. Crea un nuevo proyecto<br>
-      3. Ve a <strong style="color:var(--text)">SQL Editor</strong> y ejecuta:<br><br>
-      <code>CREATE TABLE tiempos (
-  id bigserial primary key,
-  nombre text not null,
-  categoria text not null,
-  tiempo_ms integer not null,
-  penalizacion text default 'OK',
-  fecha timestamptz default now()
-);
-ALTER TABLE tiempos ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "public read" ON tiempos FOR SELECT USING (true);
-CREATE POLICY "public insert" ON tiempos FOR INSERT WITH CHECK (true);</code><br><br>
-      4. Ve a <strong style="color:var(--text)">Project Settings → API</strong> y copia:<br>
-      &nbsp;• <strong style="color:var(--text)">Project URL</strong><br>
-      &nbsp;• <strong style="color:var(--text)">anon/public key</strong><br><br>
-      5. Pégalos abajo y guarda.
+      <strong style="color:var(--text)">La base de datos ya está preconfigurada.</strong><br><br>
+      Solo necesitas introducir la <strong style="color:var(--text)">Anon Key</strong> de Supabase para activar la conexión.<br><br>
+      Encuéntrala en: <strong style="color:var(--text)">supabase.com → tu proyecto → Settings → API Keys → Legacy anon key</strong><br><br>
+      La clave empieza por <code>eyJ...</code> Se guarda en tu navegador y no es visible para otros usuarios.
     </div>
 
-    <div class="config-field">
-      <label class="config-label">Supabase Project URL</label>
-      <input type="text" id="cfg-url" class="config-input"
-             placeholder="https://xxxxxxxxxxxx.supabase.co">
-    </div>
     <div class="config-field">
       <label class="config-label">Supabase Anon Key</label>
       <input type="text" id="cfg-key" class="config-input"
              placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
     </div>
-    <button class="btn-primary" onclick="saveConfig()">Guardar configuración</button>
+    <button class="btn-primary" onclick="saveConfig()">Guardar clave</button>
 
     <div id="cfg-status" style="margin-top:14px;font-size:0.85rem;"></div>
   </div>
@@ -696,39 +667,36 @@ let penalty      = 'OK';   // 'OK' | '+2' | 'DNF'
 let playerName   = '';
 
 /* ═══════════════════════════════════════════════════
-   LOCAL STORAGE CONFIG
+   SUPABASE CONFIG — hardcodeado para todos los usuarios
    ═══════════════════════════════════════════════════ */
+const SB_URL = 'https://nqbxrkxyynzjmntmwzdw.supabase.co';
+const SB_KEY = localStorage.getItem('sb_key') || '';
+
 function getConfig() {
-  return {
-    url: localStorage.getItem('sb_url') || '',
-    key: localStorage.getItem('sb_key') || ''
-  };
+  return { url: SB_URL, key: localStorage.getItem('sb_key') || '' };
 }
 function saveConfig() {
-  const url = document.getElementById('cfg-url').value.trim();
   const key = document.getElementById('cfg-key').value.trim();
-  if(!url || !key) { toast('Rellena los dos campos','error'); return; }
-  localStorage.setItem('sb_url', url);
+  if(!key) { toast('Pega la Anon Key','error'); return; }
   localStorage.setItem('sb_key', key);
-  toast('Configuración guardada ✓','success');
+  toast('Clave guardada ✓','success');
   document.getElementById('cfg-status').innerHTML =
-    '<span style="color:var(--success)">✓ Configuración guardada</span>';
+    '<span style="color:var(--success)">✓ Clave guardada</span>';
 }
 function loadConfigFields() {
-  const c = getConfig();
-  document.getElementById('cfg-url').value = c.url;
-  document.getElementById('cfg-key').value = c.key;
-  if(c.url) document.getElementById('cfg-status').innerHTML =
-    '<span style="color:var(--success)">✓ Configuración cargada</span>';
+  const k = localStorage.getItem('sb_key') || '';
+  document.getElementById('cfg-key').value = k;
+  if(k) document.getElementById('cfg-status').innerHTML =
+    '<span style="color:var(--success)">✓ Clave cargada</span>';
 }
 
 /* ═══════════════════════════════════════════════════
    SUPABASE API
    ═══════════════════════════════════════════════════ */
 async function sbInsert(row) {
-  const {url, key} = getConfig();
-  if(!url||!key) throw new Error('Configura Supabase primero');
-  const r = await fetch(`${url}/rest/v1/tiempos`, {
+  const {key} = getConfig();
+  if(!key) throw new Error('Configura la Anon Key en la pestaña Configurar');
+  const r = await fetch(`${SB_URL}/rest/v1/tiempos`, {
     method: 'POST',
     headers: {
       'Content-Type':'application/json',
@@ -743,9 +711,9 @@ async function sbInsert(row) {
 }
 
 async function sbSelect(cat = null) {
-  const {url, key} = getConfig();
-  if(!url||!key) throw new Error('Configura Supabase primero');
-  let endpoint = `${url}/rest/v1/tiempos?select=*&order=tiempo_ms.asc&limit=200`;
+  const {key} = getConfig();
+  if(!key) throw new Error('Configura la Anon Key en la pestaña Configurar');
+  let endpoint = `${SB_URL}/rest/v1/tiempos?select=*&order=tiempo_ms.asc&limit=500`;
   if(cat && cat !== 'all') endpoint += `&categoria=eq.${encodeURIComponent(cat)}`;
   const r = await fetch(endpoint, {
     headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
@@ -754,9 +722,16 @@ async function sbSelect(cat = null) {
   return r.json();
 }
 
-/* ═══════════════════════════════════════════════════
-   CATEGORY UI
-   ═══════════════════════════════════════════════════ */
+async function sbDelete(id) {
+  const {key} = getConfig();
+  if(!key) throw new Error('Sin clave configurada');
+  const r = await fetch(`${SB_URL}/rest/v1/tiempos?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
+  });
+  if(!r.ok) { const e = await r.text(); throw new Error(e); }
+}
+
 function buildCatGrid() {
   const grid = document.getElementById('cat-grid');
   grid.innerHTML = CATEGORIES.map(c =>
@@ -890,9 +865,9 @@ function togglePenalty(p) {
 
 async function saveTime() {
   const btn = document.getElementById('btn-save');
-  const {url, key} = getConfig();
-  if(!url || !key) {
-    toast('Configura Supabase primero (ver pestaña Configurar)','error');
+  const {key} = getConfig();
+  if(!key) {
+    toast('Introduce la Anon Key en Configurar','error');
     showPage('config'); return;
   }
   btn.disabled = true;
@@ -923,8 +898,8 @@ async function saveTime() {
    PERSONAL BEST
    ═══════════════════════════════════════════════════ */
 async function loadPB(cat) {
-  const {url, key} = getConfig();
-  if(!url||!key||!playerName||!cat) return;
+  const {key} = getConfig();
+  if(!key||!playerName||!cat) return;
   try {
     const rows = await sbSelect(cat);
     const mine = rows.filter(r =>
@@ -943,7 +918,6 @@ let manPenalty = 'OK';
 let manRecentList = [];
 
 function initManualPage() {
-  // Populate category select
   const sel = document.getElementById('man-cat');
   if(sel.options.length === 1) {
     CATEGORIES.forEach(c => {
@@ -952,7 +926,6 @@ function initManualPage() {
       sel.appendChild(o);
     });
   }
-  setManPenalty('OK');
   renderManRecent();
 }
 
@@ -990,7 +963,7 @@ function previewManualTime() {
   const parsed = parseTimeInput(raw);
   if(!parsed) { preview.style.color='var(--accent2)'; preview.textContent = 'Formato no válido'; return; }
   preview.style.color = 'var(--accent)';
-  preview.textContent = parsed.isDNF ? 'DNF' : formatTime(parsed.ms) + (manPenalty==='+2' ? ' (+2 → '+formatTime(parsed.ms+2000)+')' : '');
+  preview.textContent = parsed.isDNF ? 'DNF' : formatTime(parsed.ms);
 }
 
 async function submitManual() {
@@ -1003,18 +976,18 @@ async function submitManual() {
   if(!cat)  { status.innerHTML = '<span style="color:var(--accent2)">Selecciona una categoría</span>'; return; }
 
   const parsed = parseTimeInput(raw);
-  if(!parsed && manPenalty !== 'DNF') {
+  if(!parsed) {
     status.innerHTML = '<span style="color:var(--accent2)">Tiempo no válido. Usa formato 12.34 o 1:23.45</span>';
     return;
   }
 
-  const isDNF = manPenalty === 'DNF' || (parsed && parsed.isDNF);
-  const finalMs = isDNF ? 0 : (manPenalty === '+2' ? parsed.ms + 2000 : parsed.ms);
-  const penStr  = isDNF ? 'DNF' : manPenalty;
+  const isDNF = parsed.isDNF;
+  const finalMs = isDNF ? 0 : parsed.ms;
+  const penStr  = isDNF ? 'DNF' : 'OK';
 
-  const {url, key} = getConfig();
-  if(!url || !key) {
-    status.innerHTML = '<span style="color:var(--accent2)">Configura Supabase primero</span>';
+  const {key} = getConfig();
+  if(!key) {
+    status.innerHTML = '<span style="color:var(--accent2)">Configura la Anon Key primero</span>';
     showPage('config'); return;
   }
 
@@ -1035,6 +1008,13 @@ async function submitManual() {
       status.innerHTML = `<span style="color:var(--muted)">No guardado: ya existe un tiempo mejor de <strong style="color:#fbbf24">${formatTime(prevBest.tiempo_ms)}</strong> (+${formatTime(diff)} más lento)</span>`;
       btn.disabled = false; btn.textContent = 'Guardar tiempo';
       return;
+    }
+
+    // If new time is better, delete all previous records for this player+category
+    if(!isDNF && prev.length) {
+      for(const old of prev) {
+        try { await sbDelete(old.id); } catch(_) {}
+      }
     }
 
     await sbInsert({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr });
@@ -1104,12 +1084,12 @@ async function loadRankings() {
   btn.disabled = true;
 
   const el = document.getElementById('rankings-content');
-  const {url, key} = getConfig();
+  const {key} = getConfig();
 
-  if(!url || !key) {
+  if(!key) {
     el.innerHTML = `<div class="empty-state">
       <div class="empty-icon">⚙️</div>
-      <div>Configura Supabase primero en la pestaña <strong>Configurar</strong></div>
+      <div>Introduce la Anon Key en la pestaña <strong>Configurar</strong></div>
     </div>`;
     btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
     return;
@@ -1151,8 +1131,8 @@ async function loadRankings() {
         <th>Jugador</th>
         ${currentFilter==='all'?'<th>Categoría</th>':''}
         <th>Tiempo</th>
-        <th>Penalización</th>
         <th>Fecha</th>
+        <th></th>
       </tr></thead><tbody>`;
 
     sorted.forEach((row, i) => {
@@ -1166,8 +1146,8 @@ async function loadRankings() {
         <td><strong>${esc(row.nombre)}</strong></td>
         ${currentFilter==='all'?`<td><span class="cat-tag">${esc(row.categoria)}</span></td>`:''}
         <td><span class="time-cell ${rankClass} ${isDNF?'dnf':''}">${timeStr}</span></td>
-        <td style="color:var(--muted);font-size:0.82rem">${row.penalizacion}</td>
         <td class="date-cell">${date}</td>
+        <td><button onclick="deleteTime(${row.id})" title="Borrar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:6px;transition:all 0.15s" onmouseover="this.style.color='var(--accent2)'" onmouseout="this.style.color='var(--muted)'">✕</button></td>
       </tr>`;
     });
 
@@ -1182,6 +1162,17 @@ async function loadRankings() {
   }
 
   btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
+}
+
+async function deleteTime(id) {
+  if(!confirm('¿Seguro que quieres borrar este tiempo?')) return;
+  try {
+    await sbDelete(id);
+    toast('Tiempo borrado','success');
+    loadRankings();
+  } catch(err) {
+    toast('Error al borrar: ' + err.message,'error');
+  }
 }
 
 function esc(s) {
