@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rubik Hommies Timer</title>
+</head>
+<body>
+    <h1>Welcome to Rubik Hommies Timer Application</h1>
+    <p>Your Rubik's cube timing starts here!</p>
+    <button id="start-timer">Start Timer</button>
+    <button id="stop-timer" disabled>Stop Timer</button>
+    <div id="timer">00:00:00</div>
+    <script>
+        let timer;
+        let seconds = 0;
+        document.getElementById('start-timer').onclick = function() {
+            this.disabled = true;
+            document.getElementById('stop-timer').disabled = false;
+            timer = setInterval(function() {
+                seconds++;
+                let hours = Math.floor(seconds / 3600);
+                let minutes = Math.floor((seconds % 3600) / 60);
+                let secs = seconds % 60;
+                document.getElementById('timer').textContent =
+                    (hours < 10 ? '0' : '') + hours + ':' +
+                    (minutes < 10 ? '0' : '') + minutes + ':' +
+                    (secs < 10 ? '0' : '') + secs;
+            }, 1000);
+        };
+        document.getElementById('stop-timer').onclick = function() {
+            clearInterval(timer);
+            this.disabled = true;
+            document.getElementById('start-timer').disabled = false;
+        };
+    </script>
+</body>
+</html>
