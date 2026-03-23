@@ -1,44 +1,1232 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rubik Hommies Timer</title>
-    <link rel="stylesheet" href="styles.css">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Rubik Hommies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;600&display=swap" rel="stylesheet">
+<style>
+  /* ── CONFIG ─────────────────────────────────────────────── */
+  :root {
+    --bg:      #0a0a0f;
+    --bg2:     #111118;
+    --bg3:     #1a1a26;
+    --border:  #2a2a40;
+    --accent:  #7c6fff;
+    --accent2: #ff6b6b;
+    --text:    #e8e8f0;
+    --muted:   #6b6b8a;
+    --success: #4ade80;
+    --font-mono: 'Space Mono', monospace;
+    --font-sans: 'DM Sans', sans-serif;
+  }
+
+  /* ── SUPABASE CONFIG ─────────────────────────────────────── */
+  /* ⚠️  REEMPLAZA ESTOS VALORES con los tuyos de Supabase      */
+  /* Los encontrarás en: Project Settings > API              */
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── NOISE TEXTURE OVERLAY ─── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none; z-index: 0;
+  }
+
+  /* ── LAYOUT ─── */
+  #app { position: relative; z-index: 1; }
+
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--font-mono);
+    font-size: 1.1rem; font-weight: 700;
+    letter-spacing: -0.5px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-cube {
+    width: 22px; height: 22px;
+    background: var(--accent);
+    border-radius: 4px;
+    transform: rotate(15deg);
+    flex-shrink: 0;
+  }
+
+  nav { display: flex; gap: 4px; }
+  nav button {
+    background: none; border: none;
+    color: var(--muted);
+    font-family: var(--font-sans); font-size: 0.85rem; font-weight: 600;
+    padding: 7px 14px; border-radius: 8px;
+    cursor: pointer; transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+  nav button:hover { color: var(--text); background: var(--bg3); }
+  nav button.active { color: var(--accent); background: rgba(124,111,255,0.12); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+
+  /* ── PAGES ─── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── TIMER PAGE ─── */
+  .timer-grid {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  @media (max-width: 768px) {
+    .timer-grid { grid-template-columns: 1fr; }
+    header { padding: 14px 16px; }
+    main { padding: 20px 16px; }
+  }
+
+  /* ── SIDEBAR ─── */
+  .sidebar { display: flex; flex-direction: column; gap: 16px; }
+
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px;
+  }
+  .card-title {
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--muted);
+    margin-bottom: 14px;
+  }
+
+  /* Category selector */
+  .cat-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .cat-btn {
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 8px;
+    padding: 8px 6px; font-size: 0.78rem; font-weight: 600;
+    font-family: var(--font-mono); cursor: pointer; transition: all 0.15s;
+    text-align: center;
+  }
+  .cat-btn:hover { border-color: var(--accent); color: var(--text); }
+  .cat-btn.selected {
+    background: rgba(124,111,255,0.15);
+    border-color: var(--accent); color: var(--accent);
+  }
+
+  /* Player input */
+  .player-wrap { position: relative; }
+  .player-input {
+    width: 100%; background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    color: var(--text); font-family: var(--font-sans); font-size: 0.9rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .player-input:focus { border-color: var(--accent); }
+  .player-input::placeholder { color: var(--muted); }
+
+  /* ── TIMER CENTER ─── */
+  .timer-center {
+    display: flex; flex-direction: column;
+    align-items: center; gap: 24px;
+  }
+
+  /* Scramble display */
+  .scramble-card {
+    width: 100%; background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 24px;
+  }
+  .scramble-label {
+    font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--muted);
+    margin-bottom: 10px;
+  }
+  .scramble-text {
+    font-family: var(--font-mono); font-size: 0.9rem;
+    line-height: 1.7; color: var(--text);
+    word-break: break-all;
+  }
+  .scramble-refresh {
+    margin-top: 12px; background: none;
+    border: 1px solid var(--border);
+    color: var(--muted); border-radius: 7px;
+    padding: 6px 14px; font-size: 0.8rem;
+    cursor: pointer; transition: all 0.15s;
+    font-family: var(--font-sans);
+  }
+  .scramble-refresh:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Big timer display */
+  .timer-display {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px;
+  }
+  #timer-time {
+    font-family: var(--font-mono); font-size: clamp(64px, 12vw, 96px);
+    font-weight: 700; letter-spacing: -3px;
+    color: var(--text); transition: color 0.1s;
+    line-height: 1;
+  }
+  #timer-time.ready { color: var(--accent); }
+  #timer-time.running { color: var(--success); }
+
+  .timer-hint {
+    font-size: 0.8rem; color: var(--muted); text-align: center;
+  }
+
+  /* Timer controls */
+  #btn-start-stop {
+    width: 200px; padding: 16px;
+    background: var(--accent); border: none; border-radius: 12px;
+    color: #fff; font-family: var(--font-mono);
+    font-size: 1rem; font-weight: 700;
+    cursor: pointer; transition: all 0.15s;
+    letter-spacing: 1px;
+  }
+  #btn-start-stop:hover { background: #6a5eee; transform: translateY(-1px); }
+  #btn-start-stop.stop { background: var(--accent2); }
+  #btn-start-stop.stop:hover { background: #e05555; }
+
+  /* Save form */
+  .save-section {
+    width: 100%; background: var(--bg2);
+    border: 1px solid var(--border); border-radius: 14px;
+    padding: 20px 24px;
+    display: none;
+  }
+  .save-section.visible { display: block; }
+  .save-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .save-time-badge {
+    font-family: var(--font-mono); font-size: 1.6rem; font-weight: 700;
+    color: var(--success);
+  }
+  .dnf-controls { display: flex; gap: 8px; margin-left: auto; }
+  .penalty-btn {
+    background: var(--bg3); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 7px;
+    padding: 6px 12px; font-size: 0.8rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+    font-family: var(--font-sans);
+  }
+  .penalty-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .penalty-btn.active { background: rgba(255,107,107,0.15); border-color: var(--accent2); color: var(--accent2); }
+  .btn-save {
+    width: 100%; margin-top: 14px;
+    padding: 12px; border: none; border-radius: 10px;
+    background: var(--accent); color: #fff;
+    font-family: var(--font-sans); font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-save:hover { background: #6a5eee; }
+  .btn-save:disabled { opacity: 0.5; cursor: default; }
+
+  /* ── RANKINGS PAGE ─── */
+  .rankings-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 24px; flex-wrap: wrap; gap: 12px;
+  }
+  .page-title {
+    font-size: 1.5rem; font-weight: 600; letter-spacing: -0.5px;
+  }
+
+  .filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filter-btn {
+    background: var(--bg2); border: 1px solid var(--border);
+    color: var(--muted); border-radius: 8px;
+    padding: 7px 14px; font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+    font-family: var(--font-mono);
+  }
+  .filter-btn:hover { border-color: var(--accent); color: var(--text); }
+  .filter-btn.active { background: rgba(124,111,255,0.12); border-color: var(--accent); color: var(--accent); }
+
+  /* Table */
+  .table-wrap {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 14px; overflow: hidden;
+  }
+  table { width: 100%; border-collapse: collapse; }
+  thead th {
+    padding: 14px 16px; text-align: left;
+    font-size: 0.7rem; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: var(--bg3);
+  }
+  tbody tr { transition: background 0.1s; }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  tbody tr + tr { border-top: 1px solid var(--border); }
+  tbody td { padding: 13px 16px; font-size: 0.88rem; }
+
+  .rank-badge {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 7px;
+    font-family: var(--font-mono); font-size: 0.8rem; font-weight: 700;
+    background: var(--bg3);
+  }
+  .rank-badge.gold   { background: rgba(251,191,36,0.15); color: #fbbf24; }
+  .rank-badge.silver { background: rgba(148,163,184,0.15); color: #94a3b8; }
+  .rank-badge.bronze { background: rgba(180,120,80,0.15); color: #b47850; }
+
+  .time-cell {
+    font-family: var(--font-mono); font-weight: 700; font-size: 1rem;
+    color: var(--text);
+  }
+  .time-cell.gold   { color: #fbbf24; }
+  .time-cell.dnf    { color: var(--accent2); }
+
+  .cat-tag {
+    display: inline-block; padding: 3px 9px;
+    background: rgba(124,111,255,0.12); border-radius: 5px;
+    font-size: 0.78rem; font-weight: 600;
+    color: var(--accent); font-family: var(--font-mono);
+  }
+
+  .date-cell { color: var(--muted); font-size: 0.82rem; }
+
+  .empty-state {
+    padding: 60px 20px; text-align: center; color: var(--muted);
+  }
+  .empty-icon {
+    font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5;
+  }
+
+  /* Loading spinner */
+  .spinner {
+    display: inline-block; width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 28px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg3); border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 20px;
+    font-size: 0.88rem; font-weight: 500;
+    opacity: 0; transition: all 0.25s;
+    pointer-events: none; z-index: 999;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  #toast.success { border-color: var(--success); color: var(--success); }
+  #toast.error   { border-color: var(--accent2); color: var(--accent2); }
+
+  /* Config page */
+  .config-card { max-width: 560px; }
+  .config-field { margin-bottom: 16px; }
+  .config-label { font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; display: block; letter-spacing: 0.5px; }
+  .config-input {
+    width: 100%; background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px;
+    color: var(--text); font-family: var(--font-mono); font-size: 0.85rem;
+    outline: none; transition: border-color 0.2s;
+  }
+  .config-input:focus { border-color: var(--accent); }
+  .btn-primary {
+    padding: 11px 22px; background: var(--accent);
+    border: none; border-radius: 9px; color: #fff;
+    font-family: var(--font-sans); font-size: 0.9rem; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .btn-primary:hover { background: #6a5eee; }
+  .config-info {
+    background: rgba(124,111,255,0.07);
+    border: 1px solid rgba(124,111,255,0.2);
+    border-radius: 10px; padding: 14px 16px;
+    font-size: 0.82rem; line-height: 1.7;
+    color: var(--muted); margin-bottom: 20px;
+  }
+  .config-info a { color: var(--accent); text-decoration: none; }
+  .config-info a:hover { text-decoration: underline; }
+  .config-info code {
+    background: var(--bg3); padding: 2px 6px; border-radius: 4px;
+    font-family: var(--font-mono); font-size: 0.82rem;
+    color: var(--text);
+  }
+
+  /* Personal bests strip */
+  .pb-strip {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+  .pb-chip {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px;
+    font-size: 0.78rem; display: flex; gap: 8px;
+    align-items: center;
+  }
+  .pb-chip .pb-cat { color: var(--muted); font-size: 0.72rem; }
+  .pb-chip .pb-val { font-family: var(--font-mono); font-weight: 700; color: #fbbf24; }
+</style>
 </head>
-<body class="dark-theme">
-    <div id="app">
-        <h1>Rubik Hommies Timer</h1>
-        <div id="timer">
-            <h2>Current Time: <span id="time">0:00.00</span></h2>
-            <button id="start-btn">Start</button>
-            <button id="stop-btn">Stop</button>
-            <button id="reset-btn">Reset</button>
+<body>
+<div id="app">
+
+<!-- ── HEADER ──────────────────────────── -->
+<header>
+  <div class="logo">
+    <div class="logo-cube"></div>
+    Rubik Hommies
+  </div>
+  <nav>
+    <button class="active" onclick="showPage('rankings')">Rankings</button>
+    <button onclick="showPage('manual')">Subir tiempo</button>
+    <button onclick="showPage('timer')">Cronómetro</button>
+    <button onclick="showPage('config')">Configurar</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ═══════════════════════════════════════
+     PAGE: TIMER
+     ═══════════════════════════════════════ -->
+<div id="page-timer" class="page">
+  <div class="timer-grid">
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="card">
+        <div class="card-title">Nombre del jugador</div>
+        <div class="player-wrap">
+          <input type="text" id="player-name" class="player-input"
+                 placeholder="Escribe tu nombre…" maxlength="40"
+                 oninput="savePlayerName(this.value)">
         </div>
-        <div>
-            <h3>Categories</h3>
-            <select id="category">
-                <option value="3x3">3x3</option>
-                <option value="2x2">2x2</option>
-                <option value="4x4">4x4</option>
-                <option value="other">Other</option>
-            </select>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Categoría</div>
+        <div class="cat-grid" id="cat-grid">
+          <!-- filled by JS -->
         </div>
-        <div>
-            <h3>Scrambles</h3>
-            <button id="generate-scramble">Generate Scramble</button>
-            <p id="scramble-output"></p>
-        </div>
-        <div>
-            <h3>Rankings</h3>
-            <button id="show-rankings">Show Rankings</button>
-            <ul id="ranking-list"></ul>
-        </div>
-        <div>
-            <h3>Manual Upload</h3>
-            <input type="file" id="file-upload">
-        </div>
+      </div>
+
+      <div class="card" id="pb-card" style="display:none">
+        <div class="card-title">Tu mejor tiempo en esta categoría</div>
+        <div id="pb-display" style="font-family:var(--font-mono);font-size:1.4rem;font-weight:700;color:#fbbf24;">—</div>
+      </div>
     </div>
-    <script src="scripts.js"></script>
+
+    <!-- Timer Center -->
+    <div class="timer-center">
+
+      <div class="scramble-card">
+        <div class="scramble-label">Mezcla</div>
+        <div class="scramble-text" id="scramble-text">Selecciona una categoría para generar la mezcla</div>
+        <button class="scramble-refresh" id="btn-scramble" onclick="genScramble()" style="display:none">
+          ↻ Nueva mezcla
+        </button>
+      </div>
+
+      <div class="timer-display">
+        <div id="timer-time">0:00.00</div>
+        <div class="timer-hint" id="timer-hint">Selecciona categoría y escribe tu nombre</div>
+      </div>
+
+      <button id="btn-start-stop" onclick="handleTimer()" disabled>INICIAR</button>
+
+      <!-- Save section -->
+      <div class="save-section" id="save-section">
+        <div class="card-title">Guardar resultado</div>
+        <div class="save-row">
+          <div class="save-time-badge" id="save-time-display">—</div>
+          <div class="dnf-controls">
+            <button class="penalty-btn" id="btn-plus2" onclick="togglePenalty('+2')">+2</button>
+            <button class="penalty-btn" id="btn-dnf"   onclick="togglePenalty('DNF')">DNF</button>
+          </div>
+        </div>
+        <button class="btn-save" id="btn-save" onclick="saveTime()">
+          Guardar tiempo
+        </button>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     PAGE: MANUAL UPLOAD
+     ═══════════════════════════════════════ -->
+<div id="page-manual" class="page">
+  <div class="page-title" style="margin-bottom:8px">Subir tiempo manualmente</div>
+  <p style="color:var(--muted);font-size:0.88rem;margin-bottom:28px">Introduce el mejor tiempo oficial de un jugador. Si ya existe un registro para ese jugador en esa categoría, solo se guardará si el nuevo tiempo es mejor.</p>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;align-items:start">
+
+    <!-- Form card -->
+    <div class="card" style="max-width:480px">
+      <div class="card-title">Datos del tiempo</div>
+
+      <div class="config-field">
+        <label class="config-label">Nombre del jugador</label>
+        <input type="text" id="man-name" class="config-input" placeholder="Nombre completo…" maxlength="40">
+      </div>
+
+      <div class="config-field">
+        <label class="config-label">Categoría</label>
+        <select id="man-cat" class="config-input" style="cursor:pointer">
+          <option value="">— Selecciona categoría —</option>
+        </select>
+      </div>
+
+      <div class="config-field">
+        <label class="config-label">Tiempo <span style="font-weight:400;color:var(--muted)">(formato: 1:23.45 · 45.67 · o "DNF")</span></label>
+        <input type="text" id="man-time" class="config-input"
+               placeholder="ej: 12.34 · 1:05.22 · DNF"
+               oninput="previewManualTime()"
+               onkeydown="if(event.key==='Enter') submitManual()">
+        <div id="man-preview" style="margin-top:8px;font-family:var(--font-mono);font-size:1.3rem;font-weight:700;color:var(--accent);min-height:28px"></div>
+      </div>
+
+      <div class="config-field">
+        <label class="config-label">Penalización</label>
+        <div style="display:flex;gap:8px">
+          <button class="penalty-btn" id="man-btn-ok"   onclick="setManPenalty('OK')"  style="flex:1" >OK</button>
+          <button class="penalty-btn" id="man-btn-plus2" onclick="setManPenalty('+2')" style="flex:1">+2</button>
+          <button class="penalty-btn" id="man-btn-dnf"   onclick="setManPenalty('DNF')" style="flex:1">DNF</button>
+        </div>
+      </div>
+
+      <button class="btn-save" id="man-btn-save" onclick="submitManual()" style="margin-top:4px">
+        Guardar tiempo
+      </button>
+      <div id="man-status" style="margin-top:12px;font-size:0.84rem;min-height:20px"></div>
+    </div>
+
+    <!-- Recent uploads card -->
+    <div class="card">
+      <div class="card-title">Últimas entradas manuales</div>
+      <div id="man-recent">
+        <div style="color:var(--muted);font-size:0.85rem">Los tiempos guardados aparecerán aquí.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     PAGE: RANKINGS
+     ═══════════════════════════════════════ -->
+<div id="page-rankings" class="page active">
+  <div class="rankings-header">
+    <div class="page-title">Rankings</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="filter-row" id="filter-row">
+        <button class="filter-btn active" onclick="setFilter('all')" data-filter="all">Todas</button>
+        <!-- dynamic cat filters added by JS -->
+      </div>
+      <button class="filter-btn" onclick="loadRankings()" id="btn-refresh">
+        ↻ Actualizar
+      </button>
+    </div>
+  </div>
+
+  <div id="rankings-content">
+    <div class="empty-state">
+      <div class="empty-icon">🏆</div>
+      <div>Cargando resultados…</div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════
+     PAGE: CONFIG
+     ═══════════════════════════════════════ -->
+<div id="page-config" class="page">
+  <div class="page-title" style="margin-bottom:24px">Configuración de Supabase</div>
+
+  <div class="card config-card">
+    <div class="config-info">
+      <strong style="color:var(--text)">Cómo configurar Supabase (gratis):</strong><br><br>
+      1. Crea una cuenta en <a href="https://supabase.com" target="_blank">supabase.com</a><br>
+      2. Crea un nuevo proyecto<br>
+      3. Ve a <strong style="color:var(--text)">SQL Editor</strong> y ejecuta:<br><br>
+      <code>CREATE TABLE tiempos (
+  id bigserial primary key,
+  nombre text not null,
+  categoria text not null,
+  tiempo_ms integer not null,
+  penalizacion text default 'OK',
+  fecha timestamptz default now()
+);
+ALTER TABLE tiempos ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "public read" ON tiempos FOR SELECT USING (true);
+CREATE POLICY "public insert" ON tiempos FOR INSERT WITH CHECK (true);</code><br><br>
+      4. Ve a <strong style="color:var(--text)">Project Settings → API</strong> y copia:<br>
+      &nbsp;• <strong style="color:var(--text)">Project URL</strong><br>
+      &nbsp;• <strong style="color:var(--text)">anon/public key</strong><br><br>
+      5. Pégalos abajo y guarda.
+    </div>
+
+    <div class="config-field">
+      <label class="config-label">Supabase Project URL</label>
+      <input type="text" id="cfg-url" class="config-input"
+             placeholder="https://xxxxxxxxxxxx.supabase.co">
+    </div>
+    <div class="config-field">
+      <label class="config-label">Supabase Anon Key</label>
+      <input type="text" id="cfg-key" class="config-input"
+             placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+    </div>
+    <button class="btn-primary" onclick="saveConfig()">Guardar configuración</button>
+
+    <div id="cfg-status" style="margin-top:14px;font-size:0.85rem;"></div>
+  </div>
+</div>
+
+</main>
+</div><!-- #app -->
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+/* ═══════════════════════════════════════════════════
+   CATEGORIES
+   ═══════════════════════════════════════════════════ */
+const CATEGORIES = [
+  '3x3','2x2','4x4','5x5','6x6','7x7',
+  '3x3OH','3x3 Blind','Pyraminx','Megaminx',
+  'Clock','Skewb','Square-1','Magic','FTO','FMC'
+];
+
+/* ═══════════════════════════════════════════════════
+   SCRAMBLE GENERATORS
+   ═══════════════════════════════════════════════════ */
+const MOVES_3 = ['U','D','F','B','R','L'];
+const MODS    = ['','\'','2'];
+const MOVES_BIG4 = ['U','D','F','B','R','L','Uw','Dw','Fw','Bw','Rw','Lw'];
+const SKEWB_MOVES = ['R','L','U','B'];
+const PYR_MOVES   = ['U','L','R','B'];
+const SQ1 = () => {
+  const s = [];
+  for(let i=0;i<7;i++){
+    const t = Math.floor(Math.random()*6)-2;
+    const b = Math.floor(Math.random()*6)-2;
+    s.push(`(${t},${b})`);
+    if(i<6) s.push('/');
+  }
+  return s.join(' ');
+};
+const CLOCK_PINS  = ['UR','DR','DL','UL','U','R','D','L','ALL'];
+const FMC_SCRAMBLES = [
+  "R' U' F R2 D2 L2 F' R2 F D2 F' L' R' F R' F2 L F R U' F",
+  "R' U' F D2 R2 F2 L2 B' D2 F R2 D' L' U F' U L D' B L2 F R' U' F",
+  "R' U' F U2 R2 F L2 B U2 L2 B' R B U' R F' L' D R2 D R' U' F"
+];
+
+function genMoves(set, modSet, n, noRep = true) {
+  const out = []; let last = '';
+  while(out.length < n) {
+    const m = set[Math.floor(Math.random()*set.length)];
+    if(noRep && m[0] === last[0]) continue;
+    last = m;
+    out.push(m + modSet[Math.floor(Math.random()*modSet.length)]);
+  }
+  return out.join(' ');
+}
+
+function getScramble(cat) {
+  switch(cat) {
+    case '3x3':    return genMoves(MOVES_3, MODS, 20);
+    case '2x2':    return genMoves(MOVES_3, MODS, 11);
+    case '4x4':    return genMoves(MOVES_BIG4, MODS, 40);
+    case '5x5':    return genMoves(MOVES_BIG4.concat(['3Uw','3Fw','3Rw']), MODS, 60);
+    case '6x6':    return genMoves(MOVES_BIG4.concat(['3Uw','4Uw']), MODS, 80);
+    case '7x7':    return genMoves(MOVES_BIG4.concat(['3Uw','4Uw','3Rw','4Rw']), MODS, 100);
+    case '3x3OH':  return genMoves(MOVES_3, MODS, 20);
+    case '3x3 Blind': return genMoves(MOVES_3, MODS, 20);
+    case 'Pyraminx': return genMoves(PYR_MOVES, MODS, 9);
+    case 'Megaminx': return genMoves(['R','D'], ["++","--"], 70, false);
+    case 'Clock':  {
+      const p=[]; for(let i=0;i<9;i++) p.push(CLOCK_PINS[i]+'+'+(Math.floor(Math.random()*11)+1));
+      return p.join(' / ');
+    }
+    case 'Skewb':  return genMoves(SKEWB_MOVES, ['','\''], 11);
+    case 'Square-1': return SQ1();
+    case 'Magic':  return 'Sin mezcla estándar';
+    case 'FTO':    return genMoves(['U','F','R','L','BR','BL','DR','DL'], MODS, 18);
+    case 'FMC':    return FMC_SCRAMBLES[Math.floor(Math.random()*FMC_SCRAMBLES.length)];
+    default:       return genMoves(MOVES_3, MODS, 20);
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════ */
+let selectedCat  = null;
+let timerRunning = false;
+let timerStart   = 0;
+let timerRAF     = null;
+let lastTime_ms  = 0;
+let penalty      = 'OK';   // 'OK' | '+2' | 'DNF'
+let playerName   = '';
+
+/* ═══════════════════════════════════════════════════
+   LOCAL STORAGE CONFIG
+   ═══════════════════════════════════════════════════ */
+function getConfig() {
+  return {
+    url: localStorage.getItem('sb_url') || '',
+    key: localStorage.getItem('sb_key') || ''
+  };
+}
+function saveConfig() {
+  const url = document.getElementById('cfg-url').value.trim();
+  const key = document.getElementById('cfg-key').value.trim();
+  if(!url || !key) { toast('Rellena los dos campos','error'); return; }
+  localStorage.setItem('sb_url', url);
+  localStorage.setItem('sb_key', key);
+  toast('Configuración guardada ✓','success');
+  document.getElementById('cfg-status').innerHTML =
+    '<span style="color:var(--success)">✓ Configuración guardada</span>';
+}
+function loadConfigFields() {
+  const c = getConfig();
+  document.getElementById('cfg-url').value = c.url;
+  document.getElementById('cfg-key').value = c.key;
+  if(c.url) document.getElementById('cfg-status').innerHTML =
+    '<span style="color:var(--success)">✓ Configuración cargada</span>';
+}
+
+/* ═══════════════════════════════════════════════════
+   SUPABASE API
+   ═══════════════════════════════════════════════════ */
+async function sbInsert(row) {
+  const {url, key} = getConfig();
+  if(!url||!key) throw new Error('Configura Supabase primero');
+  const r = await fetch(`${url}/rest/v1/tiempos`, {
+    method: 'POST',
+    headers: {
+      'Content-Type':'application/json',
+      'apikey': key,
+      'Authorization': `Bearer ${key}`,
+      'Prefer': 'return=representation'
+    },
+    body: JSON.stringify(row)
+  });
+  if(!r.ok) { const e = await r.text(); throw new Error(e); }
+  return r.json();
+}
+
+async function sbSelect(cat = null) {
+  const {url, key} = getConfig();
+  if(!url||!key) throw new Error('Configura Supabase primero');
+  let endpoint = `${url}/rest/v1/tiempos?select=*&order=tiempo_ms.asc&limit=200`;
+  if(cat && cat !== 'all') endpoint += `&categoria=eq.${encodeURIComponent(cat)}`;
+  const r = await fetch(endpoint, {
+    headers: { 'apikey': key, 'Authorization': `Bearer ${key}` }
+  });
+  if(!r.ok) { const e = await r.text(); throw new Error(e); }
+  return r.json();
+}
+
+/* ═══════════════════════════════════════════════════
+   CATEGORY UI
+   ═══════════════════════════════════════════════════ */
+function buildCatGrid() {
+  const grid = document.getElementById('cat-grid');
+  grid.innerHTML = CATEGORIES.map(c =>
+    `<button class="cat-btn" onclick="selectCat('${c}')">${c}</button>`
+  ).join('');
+}
+
+function selectCat(cat) {
+  selectedCat = cat;
+  document.querySelectorAll('.cat-btn').forEach(b =>
+    b.classList.toggle('selected', b.textContent === cat)
+  );
+  document.getElementById('btn-scramble').style.display = '';
+  genScramble();
+  checkReadyState();
+  loadPB(cat);
+}
+
+/* ═══════════════════════════════════════════════════
+   PLAYER NAME
+   ═══════════════════════════════════════════════════ */
+function savePlayerName(v) {
+  playerName = v.trim();
+  localStorage.setItem('player_name', playerName);
+  checkReadyState();
+}
+function loadPlayerName() {
+  const n = localStorage.getItem('player_name') || '';
+  document.getElementById('player-name').value = n;
+  playerName = n;
+}
+
+/* ═══════════════════════════════════════════════════
+   SCRAMBLE
+   ═══════════════════════════════════════════════════ */
+function genScramble() {
+  if(!selectedCat) return;
+  document.getElementById('scramble-text').textContent = getScramble(selectedCat);
+}
+
+/* ═══════════════════════════════════════════════════
+   TIMER
+   ═══════════════════════════════════════════════════ */
+function checkReadyState() {
+  const ready = selectedCat && playerName.length > 0;
+  const btn = document.getElementById('btn-start-stop');
+  btn.disabled = !ready;
+  document.getElementById('timer-hint').textContent =
+    ready ? 'ESPACIO o botón para iniciar / detener' :
+    (!playerName ? 'Escribe tu nombre para empezar' : 'Selecciona una categoría');
+}
+
+function formatTime(ms) {
+  const t = Math.abs(ms);
+  const mins = Math.floor(t / 60000);
+  const secs = Math.floor((t % 60000) / 1000);
+  const cents = Math.floor((t % 1000) / 10);
+  if(mins > 0) return `${mins}:${String(secs).padStart(2,'0')}.${String(cents).padStart(2,'0')}`;
+  return `${secs}.${String(cents).padStart(2,'0')}`;
+}
+
+function tick() {
+  const elapsed = Date.now() - timerStart;
+  document.getElementById('timer-time').textContent = formatTime(elapsed);
+  timerRAF = requestAnimationFrame(tick);
+}
+
+function handleTimer() {
+  if(!selectedCat || !playerName) return;
+  if(timerRunning) {
+    // STOP
+    cancelAnimationFrame(timerRAF);
+    lastTime_ms = Date.now() - timerStart;
+    timerRunning = false;
+    const display = document.getElementById('timer-time');
+    display.textContent = formatTime(lastTime_ms);
+    display.className = '';
+    document.getElementById('btn-start-stop').textContent = 'INICIAR';
+    document.getElementById('btn-start-stop').classList.remove('stop');
+    showSaveSection();
+  } else {
+    // START
+    hideSaveSection();
+    penalty = 'OK';
+    timerStart = Date.now();
+    timerRunning = true;
+    const display = document.getElementById('timer-time');
+    display.className = 'running';
+    document.getElementById('btn-start-stop').textContent = 'DETENER';
+    document.getElementById('btn-start-stop').classList.add('stop');
+    timerRAF = requestAnimationFrame(tick);
+  }
+}
+
+// Spacebar shortcut
+document.addEventListener('keydown', e => {
+  if(e.code === 'Space' && e.target.tagName !== 'INPUT') {
+    e.preventDefault();
+    if(!document.getElementById('btn-start-stop').disabled)
+      handleTimer();
+  }
+});
+
+/* ═══════════════════════════════════════════════════
+   SAVE SECTION
+   ═══════════════════════════════════════════════════ */
+function showSaveSection() {
+  document.getElementById('save-section').classList.add('visible');
+  updateSaveDisplay();
+}
+function hideSaveSection() {
+  document.getElementById('save-section').classList.remove('visible');
+  document.getElementById('btn-plus2').classList.remove('active');
+  document.getElementById('btn-dnf').classList.remove('active');
+}
+
+function updateSaveDisplay() {
+  let txt;
+  if(penalty === 'DNF')     txt = 'DNF';
+  else if(penalty === '+2') txt = formatTime(lastTime_ms + 2000) + ' (+2)';
+  else                      txt = formatTime(lastTime_ms);
+  document.getElementById('save-time-display').textContent = txt;
+}
+
+function togglePenalty(p) {
+  penalty = (penalty === p) ? 'OK' : p;
+  document.getElementById('btn-plus2').classList.toggle('active', penalty === '+2');
+  document.getElementById('btn-dnf').classList.toggle('active', penalty === 'DNF');
+  updateSaveDisplay();
+}
+
+async function saveTime() {
+  const btn = document.getElementById('btn-save');
+  const {url, key} = getConfig();
+  if(!url || !key) {
+    toast('Configura Supabase primero (ver pestaña Configurar)','error');
+    showPage('config'); return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Guardando…';
+  const finalMs = penalty === '+2' ? lastTime_ms + 2000 : lastTime_ms;
+  try {
+    await sbInsert({
+      nombre:       playerName,
+      categoria:    selectedCat,
+      tiempo_ms:    finalMs,
+      penalizacion: penalty
+    });
+    toast('Tiempo guardado ✓','success');
+    hideSaveSection();
+    genScramble();
+    document.getElementById('timer-time').textContent = '0:00.00';
+    document.getElementById('timer-time').className = '';
+    loadPB(selectedCat);
+  } catch(err) {
+    toast('Error al guardar: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Guardar tiempo';
+  }
+}
+
+/* ═══════════════════════════════════════════════════
+   PERSONAL BEST
+   ═══════════════════════════════════════════════════ */
+async function loadPB(cat) {
+  const {url, key} = getConfig();
+  if(!url||!key||!playerName||!cat) return;
+  try {
+    const rows = await sbSelect(cat);
+    const mine = rows.filter(r =>
+      r.nombre.toLowerCase() === playerName.toLowerCase() && r.penalizacion !== 'DNF'
+    );
+    const pb = mine.length ? mine.reduce((a,b)=>a.tiempo_ms<b.tiempo_ms?a:b) : null;
+    document.getElementById('pb-card').style.display = '';
+    document.getElementById('pb-display').textContent = pb ? formatTime(pb.tiempo_ms) : '—';
+  } catch(_) {}
+}
+
+/* ═══════════════════════════════════════════════════
+   MANUAL UPLOAD
+   ═══════════════════════════════════════════════════ */
+let manPenalty = 'OK';
+let manRecentList = [];
+
+function initManualPage() {
+  // Populate category select
+  const sel = document.getElementById('man-cat');
+  if(sel.options.length === 1) {
+    CATEGORIES.forEach(c => {
+      const o = document.createElement('option');
+      o.value = o.textContent = c;
+      sel.appendChild(o);
+    });
+  }
+  setManPenalty('OK');
+  renderManRecent();
+}
+
+function setManPenalty(p) {
+  manPenalty = p;
+  ['OK','+2','DNF'].forEach(v => {
+    const btn = document.getElementById('man-btn-'+v.replace('+','plus').toLowerCase().replace('ok','ok'));
+    if(btn) btn.classList.toggle('active', manPenalty === v);
+  });
+  // sync DNF into time field
+  if(p === 'DNF') {
+    document.getElementById('man-time').value = 'DNF';
+    document.getElementById('man-preview').textContent = 'DNF';
+  }
+  previewManualTime();
+}
+
+function parseTimeInput(raw) {
+  const s = raw.trim().toUpperCase();
+  if(s === 'DNF') return { ms: 0, isDNF: true };
+  // formats: SS.cc  M:SS.cc  MM:SS.cc
+  const match = s.match(/^(\d{1,2}:)?(\d{1,2})\.(\d{1,2})$/);
+  if(!match) return null;
+  const mins = match[1] ? parseInt(match[1]) : 0;
+  const secs = parseInt(match[2]);
+  const cents = parseInt(match[3]);
+  if(secs >= 60) return null;
+  return { ms: mins*60000 + secs*1000 + cents*10, isDNF: false };
+}
+
+function previewManualTime() {
+  const raw = document.getElementById('man-time').value;
+  const preview = document.getElementById('man-preview');
+  if(!raw.trim()) { preview.textContent = ''; return; }
+  const parsed = parseTimeInput(raw);
+  if(!parsed) { preview.style.color='var(--accent2)'; preview.textContent = 'Formato no válido'; return; }
+  preview.style.color = 'var(--accent)';
+  preview.textContent = parsed.isDNF ? 'DNF' : formatTime(parsed.ms) + (manPenalty==='+2' ? ' (+2 → '+formatTime(parsed.ms+2000)+')' : '');
+}
+
+async function submitManual() {
+  const name = document.getElementById('man-name').value.trim();
+  const cat  = document.getElementById('man-cat').value;
+  const raw  = document.getElementById('man-time').value;
+  const status = document.getElementById('man-status');
+
+  if(!name) { status.innerHTML = '<span style="color:var(--accent2)">Introduce el nombre del jugador</span>'; return; }
+  if(!cat)  { status.innerHTML = '<span style="color:var(--accent2)">Selecciona una categoría</span>'; return; }
+
+  const parsed = parseTimeInput(raw);
+  if(!parsed && manPenalty !== 'DNF') {
+    status.innerHTML = '<span style="color:var(--accent2)">Tiempo no válido. Usa formato 12.34 o 1:23.45</span>';
+    return;
+  }
+
+  const isDNF = manPenalty === 'DNF' || (parsed && parsed.isDNF);
+  const finalMs = isDNF ? 0 : (manPenalty === '+2' ? parsed.ms + 2000 : parsed.ms);
+  const penStr  = isDNF ? 'DNF' : manPenalty;
+
+  const {url, key} = getConfig();
+  if(!url || !key) {
+    status.innerHTML = '<span style="color:var(--accent2)">Configura Supabase primero</span>';
+    showPage('config'); return;
+  }
+
+  const btn = document.getElementById('man-btn-save');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  status.textContent = '';
+
+  try {
+    // Check if a better time already exists for this player+category
+    const existing = await sbSelect(cat);
+    const prev = existing.filter(r =>
+      r.nombre.toLowerCase() === name.toLowerCase() && r.penalizacion !== 'DNF'
+    );
+    const prevBest = prev.length ? prev.reduce((a,b)=>a.tiempo_ms<b.tiempo_ms?a:b) : null;
+
+    if(!isDNF && prevBest && prevBest.tiempo_ms <= finalMs) {
+      const diff = finalMs - prevBest.tiempo_ms;
+      status.innerHTML = `<span style="color:var(--muted)">No guardado: ya existe un tiempo mejor de <strong style="color:#fbbf24">${formatTime(prevBest.tiempo_ms)}</strong> (+${formatTime(diff)} más lento)</span>`;
+      btn.disabled = false; btn.textContent = 'Guardar tiempo';
+      return;
+    }
+
+    await sbInsert({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr });
+
+    const displayTime = isDNF ? 'DNF' : formatTime(finalMs);
+    status.innerHTML = `<span style="color:var(--success)">✓ Tiempo guardado: <strong>${displayTime}</strong> para <strong>${esc(name)}</strong> en ${esc(cat)}</span>`;
+
+    manRecentList.unshift({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr, fecha: new Date().toISOString() });
+    if(manRecentList.length > 10) manRecentList.pop();
+    renderManRecent();
+
+    // Reset form
+    document.getElementById('man-time').value = '';
+    document.getElementById('man-preview').textContent = '';
+    setManPenalty('OK');
+    toast('Tiempo guardado ✓', 'success');
+
+  } catch(err) {
+    status.innerHTML = `<span style="color:var(--accent2)">Error: ${esc(err.message)}</span>`;
+  }
+
+  btn.disabled = false; btn.textContent = 'Guardar tiempo';
+}
+
+function renderManRecent() {
+  const el = document.getElementById('man-recent');
+  if(!manRecentList.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:0.85rem">Los tiempos guardados aparecerán aquí.</div>';
+    return;
+  }
+  el.innerHTML = manRecentList.map(r => {
+    const isDNF = r.penalizacion === 'DNF';
+    const t = isDNF ? 'DNF' : formatTime(r.tiempo_ms);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <span class="cat-tag">${esc(r.categoria)}</span>
+      <span style="flex:1;font-size:0.88rem">${esc(r.nombre)}</span>
+      <span style="font-family:var(--font-mono);font-weight:700;color:${isDNF?'var(--accent2)':'var(--success)'}">${t}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════════════
+   RANKINGS — best time per player per category
+   ═══════════════════════════════════════════════════ */
+let currentFilter = 'all';
+
+function setFilter(cat) {
+  currentFilter = cat;
+  document.querySelectorAll('#filter-row .filter-btn[data-filter]').forEach(b =>
+    b.classList.toggle('active', b.dataset.filter === cat)
+  );
+  loadRankings();
+}
+
+function buildFilterRow() {
+  const row = document.getElementById('filter-row');
+  const extra = CATEGORIES.map(c =>
+    `<button class="filter-btn" onclick="setFilter('${c}')" data-filter="${c}">${c}</button>`
+  ).join('');
+  row.innerHTML =
+    `<button class="filter-btn active" onclick="setFilter('all')" data-filter="all">Todas</button>` + extra;
+}
+
+async function loadRankings() {
+  const btn = document.getElementById('btn-refresh');
+  btn.innerHTML = '<span class="spinner"></span>';
+  btn.disabled = true;
+
+  const el = document.getElementById('rankings-content');
+  const {url, key} = getConfig();
+
+  if(!url || !key) {
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">⚙️</div>
+      <div>Configura Supabase primero en la pestaña <strong>Configurar</strong></div>
+    </div>`;
+    btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
+    return;
+  }
+
+  try {
+    const rows = await sbSelect(currentFilter === 'all' ? null : currentFilter);
+
+    if(!rows.length) {
+      el.innerHTML = `<div class="empty-state">
+        <div class="empty-icon">🏆</div>
+        <div>No hay resultados aún. ¡Sé el primero!</div>
+      </div>`;
+      btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
+      return;
+    }
+
+    // Keep only best time per player per category
+    const bestMap = {};
+    rows.forEach(r => {
+      const key = r.nombre.toLowerCase() + '||' + r.categoria;
+      const isDNF = r.penalizacion === 'DNF';
+      if(!bestMap[key]) { bestMap[key] = r; return; }
+      const prevDNF = bestMap[key].penalizacion === 'DNF';
+      // non-DNF beats DNF; lower ms wins
+      if(prevDNF && !isDNF) { bestMap[key] = r; return; }
+      if(!prevDNF && !isDNF && r.tiempo_ms < bestMap[key].tiempo_ms) bestMap[key] = r;
+    });
+
+    const sorted = Object.values(bestMap).sort((a,b) => {
+      if(a.penalizacion==='DNF' && b.penalizacion!=='DNF') return 1;
+      if(b.penalizacion==='DNF' && a.penalizacion!=='DNF') return -1;
+      return a.tiempo_ms - b.tiempo_ms;
+    });
+
+    let html = `<div class="table-wrap"><table>
+      <thead><tr>
+        <th>#</th>
+        <th>Jugador</th>
+        ${currentFilter==='all'?'<th>Categoría</th>':''}
+        <th>Tiempo</th>
+        <th>Penalización</th>
+        <th>Fecha</th>
+      </tr></thead><tbody>`;
+
+    sorted.forEach((row, i) => {
+      const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+      const isDNF = row.penalizacion === 'DNF';
+      const timeStr = isDNF ? 'DNF' : formatTime(row.tiempo_ms);
+      const date = new Date(row.fecha).toLocaleDateString('es-ES',
+        {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      html += `<tr>
+        <td><span class="rank-badge ${rankClass}">${i+1}</span></td>
+        <td><strong>${esc(row.nombre)}</strong></td>
+        ${currentFilter==='all'?`<td><span class="cat-tag">${esc(row.categoria)}</span></td>`:''}
+        <td><span class="time-cell ${rankClass} ${isDNF?'dnf':''}">${timeStr}</span></td>
+        <td style="color:var(--muted);font-size:0.82rem">${row.penalizacion}</td>
+        <td class="date-cell">${date}</td>
+      </tr>`;
+    });
+
+    html += '</tbody></table></div>';
+    el.innerHTML = html;
+
+  } catch(err) {
+    el.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">⚠️</div>
+      <div>Error al cargar: ${esc(err.message)}<br><small>Revisa tu configuración de Supabase</small></div>
+    </div>`;
+  }
+
+  btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ═══════════════════════════════════════════════════
+   NAVIGATION
+   ═══════════════════════════════════════════════════ */
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.getElementById('page-'+id).classList.add('active');
+  const pages = ['rankings','manual','timer','config'];
+  document.querySelectorAll('nav button').forEach((b,i)=>{
+    b.classList.toggle('active', pages[i]===id);
+  });
+  if(id==='rankings') loadRankings();
+  if(id==='config')   loadConfigFields();
+  if(id==='manual')   initManualPage();
+}
+
+/* ═══════════════════════════════════════════════════
+   TOAST
+   ═══════════════════════════════════════════════════ */
+let toastTimer;
+function toast(msg, type='success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>el.className='', 2800);
+}
+
+/* ═══════════════════════════════════════════════════
+   INIT
+   ═══════════════════════════════════════════════════ */
+buildCatGrid();
+buildFilterRow();
+loadPlayerName();
+checkReadyState();
+loadConfigFields();
+setTimeout(initManualPage, 0);
+loadRankings();
+</script>
 </body>
 </html>
