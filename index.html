@@ -4,35 +4,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Rubik Hommies Timer</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
-<body>
-    <h1>Welcome to Rubik Hommies Timer Application</h1>
-    <p>Your Rubik's cube timing starts here!</p>
-    <button id="start-timer">Start Timer</button>
-    <button id="stop-timer" disabled>Stop Timer</button>
-    <div id="timer">00:00:00</div>
-    <script>
-        let timer;
-        let seconds = 0;
-        document.getElementById('start-timer').onclick = function() {
-            this.disabled = true;
-            document.getElementById('stop-timer').disabled = false;
-            timer = setInterval(function() {
-                seconds++;
-                let hours = Math.floor(seconds / 3600);
-                let minutes = Math.floor((seconds % 3600) / 60);
-                let secs = seconds % 60;
-                document.getElementById('timer').textContent =
-                    (hours < 10 ? '0' : '') + hours + ':' +
-                    (minutes < 10 ? '0' : '') + minutes + ':' +
-                    (secs < 10 ? '0' : '') + secs;
-            }, 1000);
-        };
-        document.getElementById('stop-timer').onclick = function() {
-            clearInterval(timer);
-            this.disabled = true;
-            document.getElementById('start-timer').disabled = false;
-        };
-    </script>
+<body class="dark-theme">
+    <div id="app">
+        <h1>Rubik Hommies Timer</h1>
+        <div id="timer">
+            <h2>Current Time: <span id="time">0:00.00</span></h2>
+            <button id="start-btn">Start</button>
+            <button id="stop-btn">Stop</button>
+            <button id="reset-btn">Reset</button>
+        </div>
+        <div>
+            <h3>Categories</h3>
+            <select id="category">
+                <option value="3x3">3x3</option>
+                <option value="2x2">2x2</option>
+                <option value="4x4">4x4</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div>
+            <h3>Scrambles</h3>
+            <button id="generate-scramble">Generate Scramble</button>
+            <p id="scramble-output"></p>
+        </div>
+        <div>
+            <h3>Rankings</h3>
+            <button id="show-rankings">Show Rankings</button>
+            <ul id="ranking-list"></ul>
+        </div>
+        <div>
+            <h3>Manual Upload</h3>
+            <input type="file" id="file-upload">
+        </div>
+    </div>
+    <script src="scripts.js"></script>
 </body>
 </html>
