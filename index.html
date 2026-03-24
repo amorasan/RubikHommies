@@ -311,6 +311,8 @@
     display: flex; align-items: center; gap: 10px;
     font-size: 1rem; font-weight: 600; margin-bottom: 12px;
   }
+
+  .cat-tag {
     display: inline-block; padding: 3px 9px;
     background: rgba(124,111,255,0.12); border-radius: 5px;
     font-size: 0.78rem; font-weight: 600;
@@ -480,6 +482,9 @@
         ">15</div>
         <div style="font-size:0.9rem;color:var(--muted)">Pulsa en cualquier lugar para cancelar</div>
       </div>
+
+      <!-- Save section -->
+      <div class="save-section" id="save-section">
         <div class="card-title">Guardar resultado</div>
         <div class="save-row">
           <div class="save-time-badge" id="save-time-display">—</div>
@@ -753,7 +758,6 @@ function getScramble(cat) {
    STATE
    ═══════════════════════════════════════════════════ */
 let selectedCat  = null;
-let timerState   = 'idle';  // 'idle' | 'countdown' | 'running'
 let playerName   = '';
 
 /* ═══════════════════════════════════════════════════
