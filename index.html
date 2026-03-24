@@ -466,8 +466,20 @@
 
       <button id="btn-start-stop" onclick="handleTimer()" disabled>INICIAR</button>
 
-      <!-- Save section -->
-      <div class="save-section" id="save-section">
+      <!-- Countdown overlay (covers entire timer center) -->
+      <div id="countdown-overlay" style="
+        display:none; position:fixed; inset:0; z-index:200;
+        background:rgba(10,10,15,0.92);
+        flex-direction:column; align-items:center; justify-content:center;
+        gap:16px; cursor:pointer;
+      " onclick="overlayClick()">
+        <div id="countdown-number" style="
+          font-family:var(--font-mono); font-size:clamp(120px,25vw,200px);
+          font-weight:700; line-height:1; letter-spacing:-6px;
+          color:var(--text); transition:color 0.2s;
+        ">15</div>
+        <div style="font-size:0.9rem;color:var(--muted)">Pulsa en cualquier lugar para cancelar</div>
+      </div>
         <div class="card-title">Guardar resultado</div>
         <div class="save-row">
           <div class="save-time-badge" id="save-time-display">—</div>
@@ -590,63 +602,150 @@ const CATEGORIES = [
 ];
 
 /* ═══════════════════════════════════════════════════
-   SCRAMBLE GENERATORS
+   SCRAMBLE GENERATORS — notación WCA oficial
    ═══════════════════════════════════════════════════ */
-const MOVES_3 = ['U','D','F','B','R','L'];
-const MODS    = ['','\'','2'];
-const MOVES_BIG4 = ['U','D','F','B','R','L','Uw','Dw','Fw','Bw','Rw','Lw'];
-const SKEWB_MOVES = ['R','L','U','B'];
-const PYR_MOVES   = ['U','L','R','B'];
-const SQ1 = () => {
-  const s = [];
-  for(let i=0;i<7;i++){
-    const t = Math.floor(Math.random()*6)-2;
-    const b = Math.floor(Math.random()*6)-2;
-    s.push(`(${t},${b})`);
-    if(i<6) s.push('/');
-  }
-  return s.join(' ');
-};
-const CLOCK_PINS  = ['UR','DR','DL','UL','U','R','D','L','ALL'];
-const FMC_SCRAMBLES = [
-  "R' U' F R2 D2 L2 F' R2 F D2 F' L' R' F R' F2 L F R U' F",
-  "R' U' F D2 R2 F2 L2 B' D2 F R2 D' L' U F' U L D' B L2 F R' U' F",
-  "R' U' F U2 R2 F L2 B U2 L2 B' R B U' R F' L' D R2 D R' U' F"
-];
 
-function genMoves(set, modSet, n, noRep = true) {
-  const out = []; let last = '';
-  while(out.length < n) {
-    const m = set[Math.floor(Math.random()*set.length)];
-    if(noRep && m[0] === last[0]) continue;
-    last = m;
-    out.push(m + modSet[Math.floor(Math.random()*modSet.length)]);
+// Utilidad: elige elemento aleatorio
+const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+const rand = (a, b) => Math.floor(Math.random() * (b - a + 1)) + a;
+
+// Genera secuencia de movimientos sin repetir cara consecutiva
+function genMoves(faces, mods, n) {
+  const out = []; let lastFace = '';
+  while (out.length < n) {
+    const f = pick(faces);
+    if (f[0] === lastFace) continue;   // evita misma cara seguida
+    lastFace = f[0];
+    out.push(f + pick(mods));
   }
   return out.join(' ');
 }
 
+// ── NxNxN ──────────────────────────────────────────
+const FACES_3   = ['U','D','F','B','R','L'];
+const MODS_STD  = ["","'","2"];
+
+// 4x4: movimientos de 2 capas con "w"
+const FACES_4   = ['U','D','F','B','R','L','Uw','Dw','Fw','Bw','Rw','Lw'];
+// 5x5: añade 3w
+const FACES_5   = [...FACES_4,'3Uw','3Fw','3Rw'];
+// 6x6
+const FACES_6   = [...FACES_4,'3Uw','3Fw','3Rw','3Lw','3Bw'];
+// 7x7
+const FACES_7   = [...FACES_6,'4Uw','4Fw','4Rw','4Lw','4Bw'];
+
+// ── Pyraminx ────────────────────────────────────────
+// Caras: U L R B (mayúsculas = capa + punta)
+// Tips:  u l r b (minúsculas = solo punta, opcionales al final)
+function scramblePyraminx() {
+  const faces = ['U','L','R','B'];
+  const mods  = ["","'"];
+  // cuerpo: ~10 movimientos sin repetir cara
+  const body = []; let last = '';
+  while (body.length < 10) {
+    const f = pick(faces);
+    if (f === last) continue;
+    last = f;
+    body.push(f + pick(mods));
+  }
+  // tips: cada uno puede aparecer o no (50%)
+  const tips = ['u','l','r','b']
+    .filter(() => Math.random() > 0.5)
+    .map(t => t + pick(mods));
+  return [...body, ...tips].join(' ');
+}
+
+// ── Skewb ────────────────────────────────────────────
+// Solo R, U, L, B (no se repite consecutiva)
+function scrambleSkewb() {
+  const faces = ['R','U','L','B'];
+  const mods  = ["","'"];
+  return genMoves(faces, mods, 11);
+}
+
+// ── Megaminx ─────────────────────────────────────────
+// Notación oficial: R++/R-- y D++/D-- en grupos de 5+U'
+function scrambleMegaminx() {
+  const moves = [];
+  for (let i = 0; i < 7; i++) {
+    // fila de 5 R y 5 D alternos
+    const row = [];
+    for (let j = 0; j < 5; j++) {
+      row.push('R' + pick(['++','--']));
+      row.push('D' + pick(['++','--']));
+    }
+    moves.push(row.join(' '));
+    moves.push(pick(["U","U'"]));
+  }
+  return moves.join(' ');
+}
+
+// ── Clock ─────────────────────────────────────────────
+// Notación WCA: UR/DR/DL/UL/U/R/D/L/ALL seguido de número de horas (+/-)
+function scrambleClock() {
+  const pins  = ['UR','DR','DL','UL','U','R','D','L','ALL'];
+  const moves = pins.map(p => {
+    const h = rand(1, 6) * (Math.random() < 0.5 ? 1 : -1);
+    return `${p}${h > 0 ? '+' : ''}${h}`;
+  });
+  // flip: y2 al final con más movimientos en la otra cara
+  moves.push('y2');
+  const pinsB = ['UR','DR','DL','UL','U'];
+  pinsB.forEach(p => {
+    const h = rand(1, 6) * (Math.random() < 0.5 ? 1 : -1);
+    moves.push(`${p}${h > 0 ? '+' : ''}${h}`);
+  });
+  return moves.join(' ');
+}
+
+// ── Square-1 ──────────────────────────────────────────
+// Formato: (X,Y)/ donde X=-5..5, Y=-5..5, luego /
+function scrambleSq1() {
+  const moves = [];
+  for (let i = 0; i < 11; i++) {
+    const x = rand(-5, 5);
+    const y = rand(-5, 5);
+    moves.push(`(${x},${y})`);
+    if (i < 10) moves.push('/');
+  }
+  return moves.join(' ');
+}
+
+// ── FTO (Face-Turning Octahedron) ───────────────────
+// Caras: U F R L BR BL DR DL  + mods
+function scrambleFTO() {
+  const faces = ['U','F','R','L','BR','BL','DR','DL'];
+  return genMoves(faces, ["","'"], 20);
+}
+
+// ── FMC ──────────────────────────────────────────────
+const FMC_SCRAMBLES = [
+  "R' U' F R2 D2 L2 F' R2 F D2 F' L' R' F R' F2 L F R U' F",
+  "R' U' F D2 R2 F2 L2 B' D2 F R2 D' L' U F' U L D' B L2 F R' U' F",
+  "R' U' F U2 R2 F L2 B U2 L2 B' R B U' R F' L' D R2 D R' U' F",
+  "R' U' F L2 D2 F2 D2 F R2 B' D2 F2 R' F' D L' U2 R B' U R' U' F",
+  "R' U' F U2 L2 F' R2 B D2 B L2 U' R' B' L D' F' U R2 U R' U' F"
+];
+
 function getScramble(cat) {
   switch(cat) {
-    case '3x3':    return genMoves(MOVES_3, MODS, 20);
-    case '2x2':    return genMoves(MOVES_3, MODS, 11);
-    case '4x4':    return genMoves(MOVES_BIG4, MODS, 40);
-    case '5x5':    return genMoves(MOVES_BIG4.concat(['3Uw','3Fw','3Rw']), MODS, 60);
-    case '6x6':    return genMoves(MOVES_BIG4.concat(['3Uw','4Uw']), MODS, 80);
-    case '7x7':    return genMoves(MOVES_BIG4.concat(['3Uw','4Uw','3Rw','4Rw']), MODS, 100);
-    case '3x3OH':  return genMoves(MOVES_3, MODS, 20);
-    case '3x3 Blind': return genMoves(MOVES_3, MODS, 20);
-    case 'Pyraminx': return genMoves(PYR_MOVES, MODS, 9);
-    case 'Megaminx': return genMoves(['R','D'], ["++","--"], 70, false);
-    case 'Clock':  {
-      const p=[]; for(let i=0;i<9;i++) p.push(CLOCK_PINS[i]+'+'+(Math.floor(Math.random()*11)+1));
-      return p.join(' / ');
-    }
-    case 'Skewb':  return genMoves(SKEWB_MOVES, ['','\''], 11);
-    case 'Square-1': return SQ1();
-    case 'Magic':  return 'Sin mezcla estándar';
-    case 'FTO':    return genMoves(['U','F','R','L','BR','BL','DR','DL'], MODS, 18);
-    case 'FMC':    return FMC_SCRAMBLES[Math.floor(Math.random()*FMC_SCRAMBLES.length)];
-    default:       return genMoves(MOVES_3, MODS, 20);
+    case '3x3':       return genMoves(FACES_3, MODS_STD, 20);
+    case '2x2':       return genMoves(FACES_3, MODS_STD, 11);  // solo R U F (evita cara opp)
+    case '4x4':       return genMoves(FACES_4, MODS_STD, 40);
+    case '5x5':       return genMoves(FACES_5, MODS_STD, 60);
+    case '6x6':       return genMoves(FACES_6, MODS_STD, 80);
+    case '7x7':       return genMoves(FACES_7, MODS_STD, 100);
+    case '3x3OH':     return genMoves(FACES_3, MODS_STD, 20);
+    case '3x3 Blind': return genMoves(FACES_3, MODS_STD, 20);
+    case 'Pyraminx':  return scramblePyraminx();
+    case 'Megaminx':  return scrambleMegaminx();
+    case 'Clock':     return scrambleClock();
+    case 'Skewb':     return scrambleSkewb();
+    case 'Square-1':  return scrambleSq1();
+    case 'Magic':     return 'Sin mezcla estándar';
+    case 'FTO':       return scrambleFTO();
+    case 'FMC':       return pick(FMC_SCRAMBLES);
+    default:          return genMoves(FACES_3, MODS_STD, 20);
   }
 }
 
@@ -654,11 +753,7 @@ function getScramble(cat) {
    STATE
    ═══════════════════════════════════════════════════ */
 let selectedCat  = null;
-let timerRunning = false;
-let timerStart   = 0;
-let timerRAF     = null;
-let lastTime_ms  = 0;
-let penalty      = 'OK';   // 'OK' | '+2' | 'DNF'
+let timerState   = 'idle';  // 'idle' | 'countdown' | 'running'
 let playerName   = '';
 
 /* ═══════════════════════════════════════════════════
@@ -754,14 +849,45 @@ function genScramble() {
 }
 
 /* ═══════════════════════════════════════════════════
-   TIMER
+   TIMER — con cuenta atrás, pitidos y toque en pantalla
    ═══════════════════════════════════════════════════ */
+
+// Estados: 'idle' | 'countdown' | 'running'
+let timerState   = 'idle';
+let timerStart   = 0;
+let timerRAF     = null;
+let lastTime_ms  = 0;
+let penalty      = 'OK';
+let countdownVal = 15;
+let countdownInt = null;
+let audioCtx     = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function beep(freq = 880, duration = 0.12, vol = 0.4) {
+  try {
+    const ctx = getAudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.frequency.value = freq;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + duration);
+  } catch(_) {}
+}
+
 function checkReadyState() {
   const ready = selectedCat && playerName.length > 0;
   const btn = document.getElementById('btn-start-stop');
   btn.disabled = !ready;
   document.getElementById('timer-hint').textContent =
-    ready ? 'ESPACIO o botón para iniciar / detener' :
+    ready ? 'Pulsa INICIAR, ESPACIO o toca la pantalla' :
     (!playerName ? 'Escribe tu nombre para empezar' : 'Selecciona una categoría');
 }
 
@@ -770,50 +896,119 @@ function formatTime(ms) {
   const mins = Math.floor(t / 60000);
   const secs = Math.floor((t % 60000) / 1000);
   const cents = Math.floor((t % 1000) / 10);
-  if(mins > 0) return `${mins}:${String(secs).padStart(2,'0')}.${String(cents).padStart(2,'0')}`;
+  if (mins > 0) return `${mins}:${String(secs).padStart(2,'0')}.${String(cents).padStart(2,'0')}`;
   return `${secs}.${String(cents).padStart(2,'0')}`;
 }
 
 function tick() {
-  const elapsed = Date.now() - timerStart;
-  document.getElementById('timer-time').textContent = formatTime(elapsed);
+  document.getElementById('timer-time').textContent = formatTime(Date.now() - timerStart);
   timerRAF = requestAnimationFrame(tick);
 }
 
-function handleTimer() {
-  if(!selectedCat || !playerName) return;
-  if(timerRunning) {
-    // STOP
-    cancelAnimationFrame(timerRAF);
-    lastTime_ms = Date.now() - timerStart;
-    timerRunning = false;
-    const display = document.getElementById('timer-time');
-    display.textContent = formatTime(lastTime_ms);
-    display.className = '';
-    document.getElementById('btn-start-stop').textContent = 'INICIAR';
-    document.getElementById('btn-start-stop').classList.remove('stop');
-    showSaveSection();
-  } else {
-    // START
-    hideSaveSection();
-    penalty = 'OK';
-    timerStart = Date.now();
-    timerRunning = true;
-    const display = document.getElementById('timer-time');
-    display.className = 'running';
-    document.getElementById('btn-start-stop').textContent = 'DETENER';
-    document.getElementById('btn-start-stop').classList.add('stop');
-    timerRAF = requestAnimationFrame(tick);
-  }
+// ── Arrancar cuenta atrás ──────────────────────────
+function startCountdown() {
+  if (!selectedCat || !playerName) return;
+  hideSaveSection();
+  timerState   = 'countdown';
+  countdownVal = 15;
+
+  const overlay = document.getElementById('countdown-overlay');
+  const num     = document.getElementById('countdown-number');
+  overlay.style.display = 'flex';
+  num.textContent = countdownVal;
+  num.style.color = 'var(--text)';
+
+  document.getElementById('btn-start-stop').textContent = 'CANCELAR';
+  document.getElementById('btn-start-stop').classList.add('stop');
+
+  countdownInt = setInterval(() => {
+    countdownVal--;
+    num.textContent = countdownVal;
+
+    if (countdownVal === 7) {
+      num.style.color = '#fbbf24';   // amarillo
+      beep(660, 0.15);
+    } else if (countdownVal === 3) {
+      num.style.color = 'var(--accent2)'; // rojo
+      beep(880, 0.15);
+    } else if (countdownVal <= 0) {
+      clearInterval(countdownInt);
+      overlay.style.display = 'none';
+      startTimer();
+    }
+  }, 1000);
 }
 
-// Spacebar shortcut
+// ── Cancelar cuenta atrás ─────────────────────────
+function cancelCountdown() {
+  clearInterval(countdownInt);
+  timerState = 'idle';
+  document.getElementById('countdown-overlay').style.display = 'none';
+  document.getElementById('btn-start-stop').textContent = 'INICIAR';
+  document.getElementById('btn-start-stop').classList.remove('stop');
+}
+
+// ── Arrancar cronómetro ───────────────────────────
+function startTimer() {
+  timerState  = 'running';
+  timerStart  = Date.now();
+  const display = document.getElementById('timer-time');
+  display.className = 'running';
+  display.textContent = '0.00';
+  document.getElementById('btn-start-stop').textContent = 'DETENER';
+  document.getElementById('btn-start-stop').classList.add('stop');
+  document.getElementById('timer-hint').textContent = 'Pulsa en cualquier lugar para detener';
+  timerRAF = requestAnimationFrame(tick);
+}
+
+// ── Parar cronómetro ──────────────────────────────
+function stopTimer() {
+  cancelAnimationFrame(timerRAF);
+  lastTime_ms = Date.now() - timerStart;
+  timerState  = 'idle';
+  const display = document.getElementById('timer-time');
+  display.textContent = formatTime(lastTime_ms);
+  display.className = '';
+  document.getElementById('btn-start-stop').textContent = 'INICIAR';
+  document.getElementById('btn-start-stop').classList.remove('stop');
+  document.getElementById('timer-hint').textContent = 'Pulsa INICIAR, ESPACIO o toca la pantalla';
+  showSaveSection();
+}
+
+// ── Botón principal ───────────────────────────────
+function handleTimer() {
+  if (!selectedCat || !playerName) return;
+  if (timerState === 'idle')       startCountdown();
+  else if (timerState === 'countdown') cancelCountdown();
+  else if (timerState === 'running')   stopTimer();
+}
+
+// ── Click en el overlay de cuenta atrás ──────────
+function overlayClick() {
+  if (timerState === 'countdown') cancelCountdown();
+}
+
+// ── Toque / click en cualquier zona de la pantalla ─
+document.addEventListener('pointerdown', e => {
+  // Ignorar si el toque es sobre un input, select, button o el overlay
+  const tag = e.target.tagName;
+  if (['INPUT','SELECT','BUTTON','A'].includes(tag)) return;
+  if (document.getElementById('countdown-overlay').contains(e.target)) return;
+  // Solo actuar si estamos en la página del cronómetro
+  if (!document.getElementById('page-timer').classList.contains('active')) return;
+  if (!selectedCat || !playerName) return;
+
+  if (timerState === 'idle') startCountdown();
+  else if (timerState === 'running') stopTimer();
+});
+
+// ── Tecla espacio ────────────────────────────────
 document.addEventListener('keydown', e => {
-  if(e.code === 'Space' && e.target.tagName !== 'INPUT') {
+  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
     e.preventDefault();
-    if(!document.getElementById('btn-start-stop').disabled)
-      handleTimer();
+    if (!document.getElementById('btn-start-stop').disabled) handleTimer();
   }
+  if (e.code === 'Escape' && timerState === 'countdown') cancelCountdown();
 });
 
 /* ═══════════════════════════════════════════════════
