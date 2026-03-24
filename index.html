@@ -298,7 +298,19 @@
   .time-cell.gold   { color: #fbbf24; }
   .time-cell.dnf    { color: var(--accent2); }
 
-  .cat-tag {
+  .tipo-tag {
+    display: inline-block; padding: 3px 9px; border-radius: 5px;
+    font-size: 0.72rem; font-weight: 700; font-family: var(--font-mono);
+    letter-spacing: 0.5px; text-transform: uppercase;
+  }
+  .tipo-tag.single { background: rgba(74,222,128,0.12); color: #4ade80; }
+  .tipo-tag.media  { background: rgba(251,191,36,0.12);  color: #fbbf24; }
+
+  .ranking-section { margin-bottom: 32px; }
+  .ranking-section-title {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 1rem; font-weight: 600; margin-bottom: 12px;
+  }
     display: inline-block; padding: 3px 9px;
     background: rgba(124,111,255,0.12); border-radius: 5px;
     font-size: 0.78rem; font-weight: 600;
@@ -497,6 +509,14 @@
         <select id="man-cat" class="config-input" style="cursor:pointer">
           <option value="">— Selecciona categoría —</option>
         </select>
+      </div>
+
+      <div class="config-field">
+        <label class="config-label">Tipo</label>
+        <div style="display:flex;gap:8px">
+          <button class="penalty-btn active" id="man-btn-single" onclick="setManTipo('single')" style="flex:1">Single</button>
+          <button class="penalty-btn"        id="man-btn-media"  onclick="setManTipo('media')"  style="flex:1">Media</button>
+        </div>
       </div>
 
       <div class="config-field">
@@ -871,6 +891,7 @@ async function loadPB(cat) {
    MANUAL UPLOAD
    ═══════════════════════════════════════════════════ */
 let manPenalty = 'OK';
+let manTipo = 'single';
 let manRecentList = [];
 
 function initManualPage() {
@@ -882,7 +903,14 @@ function initManualPage() {
       sel.appendChild(o);
     });
   }
+  setManTipo('single');
   renderManRecent();
+}
+
+function setManTipo(t) {
+  manTipo = t;
+  document.getElementById('man-btn-single').classList.toggle('active', t === 'single');
+  document.getElementById('man-btn-media').classList.toggle('active',  t === 'media');
 }
 
 function setManPenalty(p) {
@@ -946,10 +974,12 @@ async function submitManual() {
   status.textContent = '';
 
   try {
-    // Check if a better time already exists for this player+category
     const existing = await sbSelect(cat);
+    // filter by same player AND same tipo
     const prev = existing.filter(r =>
-      r.nombre.toLowerCase() === name.toLowerCase() && r.penalizacion !== 'DNF'
+      r.nombre.toLowerCase() === name.toLowerCase() &&
+      r.penalizacion !== 'DNF' &&
+      (r.tipo || 'single') === manTipo
     );
     const prevBest = prev.length ? prev.reduce((a,b)=>a.tiempo_ms<b.tiempo_ms?a:b) : null;
 
@@ -960,26 +990,21 @@ async function submitManual() {
       return;
     }
 
-    // If new time is better, delete all previous records for this player+category
     if(!isDNF && prev.length) {
-      for(const old of prev) {
-        try { await sbDelete(old.id); } catch(_) {}
-      }
+      for(const old of prev) { try { await sbDelete(old.id); } catch(_) {} }
     }
 
-    await sbInsert({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr });
+    await sbInsert({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr, tipo: manTipo });
 
     const displayTime = isDNF ? 'DNF' : formatTime(finalMs);
-    status.innerHTML = `<span style="color:var(--success)">✓ Tiempo guardado: <strong>${displayTime}</strong> para <strong>${esc(name)}</strong> en ${esc(cat)}</span>`;
+    status.innerHTML = `<span style="color:var(--success)">✓ ${esc(name)} · ${esc(cat)} · ${manTipo} · <strong>${displayTime}</strong></span>`;
 
-    manRecentList.unshift({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr, fecha: new Date().toISOString() });
+    manRecentList.unshift({ nombre: name, categoria: cat, tiempo_ms: finalMs, penalizacion: penStr, tipo: manTipo, fecha: new Date().toISOString() });
     if(manRecentList.length > 10) manRecentList.pop();
     renderManRecent();
 
-    // Reset form
     document.getElementById('man-time').value = '';
     document.getElementById('man-preview').textContent = '';
-    setManPenalty('OK');
     toast('Tiempo guardado ✓', 'success');
 
   } catch(err) {
@@ -998,7 +1023,9 @@ function renderManRecent() {
   el.innerHTML = manRecentList.map(r => {
     const isDNF = r.penalizacion === 'DNF';
     const t = isDNF ? 'DNF' : formatTime(r.tiempo_ms);
-    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)">
+    const tipo = r.tipo || 'single';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--border)">
+      <span class="tipo-tag ${tipo}">${tipo}</span>
       <span class="cat-tag">${esc(r.categoria)}</span>
       <span style="flex:1;font-size:0.88rem">${esc(r.nombre)}</span>
       <span style="font-family:var(--font-mono);font-weight:700;color:${isDNF?'var(--accent2)':'var(--success)'}">${t}</span>
@@ -1033,73 +1060,80 @@ async function loadRankings() {
   btn.disabled = true;
 
   const el = document.getElementById('rankings-content');
-  const {key} = getConfig();
 
   try {
     const rows = await sbSelect(currentFilter);
 
     if(!rows.length) {
-      el.innerHTML = `<div class="empty-state">
-        <div class="empty-icon">🏆</div>
-        <div>No hay resultados aún. ¡Sé el primero!</div>
-      </div>`;
+      el.innerHTML = `<div class="empty-state"><div class="empty-icon">🏆</div><div>No hay resultados aún. ¡Sé el primero!</div></div>`;
       btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
       return;
     }
 
-    // Keep only best time per player per category
-    const bestMap = {};
-    rows.forEach(r => {
-      const key = r.nombre.toLowerCase() + '||' + r.categoria;
-      const isDNF = r.penalizacion === 'DNF';
-      if(!bestMap[key]) { bestMap[key] = r; return; }
-      const prevDNF = bestMap[key].penalizacion === 'DNF';
-      // non-DNF beats DNF; lower ms wins
-      if(prevDNF && !isDNF) { bestMap[key] = r; return; }
-      if(!prevDNF && !isDNF && r.tiempo_ms < bestMap[key].tiempo_ms) bestMap[key] = r;
-    });
+    // Split by tipo (default 'single' for legacy records)
+    const singles = rows.filter(r => !r.tipo || r.tipo === 'single');
+    const medias  = rows.filter(r => r.tipo === 'media');
 
-    const sorted = Object.values(bestMap).sort((a,b) => {
-      if(a.penalizacion==='DNF' && b.penalizacion!=='DNF') return 1;
-      if(b.penalizacion==='DNF' && a.penalizacion!=='DNF') return -1;
-      return a.tiempo_ms - b.tiempo_ms;
-    });
-
-    let html = `<div class="table-wrap"><table>
-      <thead><tr>
-        <th>#</th>
-        <th>Jugador</th>
-        <th>Tiempo</th>
-        <th>Fecha</th>
-        <th></th>
-      </tr></thead><tbody>`;
-
-    sorted.forEach((row, i) => {
-      const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
-      const isDNF = row.penalizacion === 'DNF';
-      const timeStr = isDNF ? 'DNF' : formatTime(row.tiempo_ms);
-      const date = new Date(row.fecha).toLocaleDateString('es-ES',
-        {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
-      html += `<tr>
-        <td><span class="rank-badge ${rankClass}">${i+1}</span></td>
-        <td><strong>${esc(row.nombre)}</strong></td>
-        <td><span class="time-cell ${rankClass} ${isDNF?'dnf':''}">${timeStr}</span></td>
-        <td class="date-cell">${date}</td>
-        <td><button onclick="deleteTime(${row.id})" title="Borrar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:6px;transition:all 0.15s" onmouseover="this.style.color='var(--accent2)'" onmouseout="this.style.color='var(--muted)'">✕</button></td>
-      </tr>`;
-    });
-
-    html += '</tbody></table></div>';
-    el.innerHTML = html;
+    el.innerHTML = buildRankingSection('Single', 'single', singles)
+                 + buildRankingSection('Media',  'media',  medias);
 
   } catch(err) {
-    el.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">⚠️</div>
-      <div>Error al cargar: ${esc(err.message)}<br><small>Revisa tu configuración de Supabase</small></div>
-    </div>`;
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div>Error al cargar: ${esc(err.message)}</div></div>`;
   }
 
   btn.innerHTML = '↻ Actualizar'; btn.disabled = false;
+}
+
+function buildRankingSection(label, tipo, rows) {
+  // Best per player
+  const bestMap = {};
+  rows.forEach(r => {
+    const k = r.nombre.toLowerCase();
+    const isDNF = r.penalizacion === 'DNF';
+    if(!bestMap[k]) { bestMap[k] = r; return; }
+    const prevDNF = bestMap[k].penalizacion === 'DNF';
+    if(prevDNF && !isDNF) { bestMap[k] = r; return; }
+    if(!prevDNF && !isDNF && r.tiempo_ms < bestMap[k].tiempo_ms) bestMap[k] = r;
+  });
+
+  const sorted = Object.values(bestMap).sort((a,b) => {
+    if(a.penalizacion==='DNF' && b.penalizacion!=='DNF') return 1;
+    if(b.penalizacion==='DNF' && a.penalizacion!=='DNF') return -1;
+    return a.tiempo_ms - b.tiempo_ms;
+  });
+
+  const tagHtml = `<span class="tipo-tag ${tipo}">${label}</span>`;
+
+  if(!sorted.length) return `
+    <div class="ranking-section">
+      <div class="ranking-section-title">${tagHtml}</div>
+      <div style="color:var(--muted);font-size:0.88rem;padding:16px 0">Sin resultados aún.</div>
+    </div>`;
+
+  let html = `<div class="ranking-section">
+    <div class="ranking-section-title">${tagHtml}</div>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>#</th><th>Jugador</th><th>Tiempo</th><th>Fecha</th><th></th>
+      </tr></thead><tbody>`;
+
+  sorted.forEach((row, i) => {
+    const rankClass = i===0?'gold':i===1?'silver':i===2?'bronze':'';
+    const isDNF = row.penalizacion === 'DNF';
+    const timeStr = isDNF ? 'DNF' : formatTime(row.tiempo_ms);
+    const date = new Date(row.fecha).toLocaleDateString('es-ES',
+      {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
+    html += `<tr>
+      <td><span class="rank-badge ${rankClass}">${i+1}</span></td>
+      <td><strong>${esc(row.nombre)}</strong></td>
+      <td><span class="time-cell ${rankClass} ${isDNF?'dnf':''}">${timeStr}</span></td>
+      <td class="date-cell">${date}</td>
+      <td><button onclick="deleteTime(${row.id})" title="Borrar" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:1rem;padding:4px 8px;border-radius:6px;transition:color 0.15s" onmouseover="this.style.color='var(--accent2)'" onmouseout="this.style.color='var(--muted)'">✕</button></td>
+    </tr>`;
+  });
+
+  html += '</tbody></table></div></div>';
+  return html;
 }
 
 async function deleteTime(id) {
