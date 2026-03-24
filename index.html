@@ -468,19 +468,19 @@
 
       <button id="btn-start-stop" onclick="handleTimer()" disabled>INICIAR</button>
 
-      <!-- Countdown overlay (covers entire timer center) -->
+      <!-- Full-screen overlay for countdown / ready / running -->
       <div id="countdown-overlay" style="
         display:none; position:fixed; inset:0; z-index:200;
-        background:rgba(10,10,15,0.92);
-        flex-direction:column; align-items:center; justify-content:center;
-        gap:16px; cursor:pointer;
-      " onclick="overlayClick()">
+        background:rgba(10,10,15,0.95);
+        flex-direction:column; align-items:center; justify-content:center; gap:20px;
+        cursor:pointer; user-select:none;
+      ">
         <div id="countdown-number" style="
-          font-family:var(--font-mono); font-size:clamp(120px,25vw,200px);
-          font-weight:700; line-height:1; letter-spacing:-6px;
-          color:var(--text); transition:color 0.2s;
+          font-family:var(--font-mono); font-size:clamp(100px,22vw,180px);
+          font-weight:700; line-height:1; letter-spacing:-4px;
+          color:var(--text); transition:color 0.3s;
         ">15</div>
-        <div style="font-size:0.9rem;color:var(--muted)">Pulsa en cualquier lugar para cancelar</div>
+        <div id="countdown-label" style="font-size:1rem;color:var(--muted);text-align:center;padding:0 24px"></div>
       </div>
 
       <!-- Save section -->
@@ -627,17 +627,18 @@ function genMoves(faces, mods, n) {
 }
 
 // ── NxNxN ──────────────────────────────────────────
-const FACES_3   = ['U','D','F','B','R','L'];
-const MODS_STD  = ["","'","2"];
+const FACES_3  = ['U','D','F','B','R','L'];
+const FACES_2  = ['R','U','F'];              // 2x2: solo R U F
+const MODS_STD = ["","'","2"];
 
-// 4x4: movimientos de 2 capas con "w"
-const FACES_4   = ['U','D','F','B','R','L','Uw','Dw','Fw','Bw','Rw','Lw'];
-// 5x5: añade 3w
-const FACES_5   = [...FACES_4,'3Uw','3Fw','3Rw'];
-// 6x6
-const FACES_6   = [...FACES_4,'3Uw','3Fw','3Rw','3Lw','3Bw'];
-// 7x7
-const FACES_7   = [...FACES_6,'4Uw','4Fw','4Rw','4Lw','4Bw'];
+// 4x4: outer + one inner layer (w suffix)
+const FACES_4  = ['U','D','F','B','R','L','Uw','Dw','Fw','Bw','Rw','Lw'];
+// 5x5: añade movimientos de 3ª capa
+const FACES_5  = [...FACES_4,'3Uw','3Dw','3Fw','3Bw','3Rw','3Lw'];
+// 6x6: como 5x5 + 4ª capa exterior
+const FACES_6  = [...FACES_5];   // TNoodle usa mismas capas para 6x6
+// 7x7: igual pero más capas
+const FACES_7  = [...FACES_5,'4Uw','4Dw','4Fw','4Bw','4Rw','4Lw'];
 
 // ── Pyraminx ────────────────────────────────────────
 // Caras: U L R B (mayúsculas = capa + punta)
@@ -735,13 +736,13 @@ const FMC_SCRAMBLES = [
 function getScramble(cat) {
   switch(cat) {
     case '3x3':       return genMoves(FACES_3, MODS_STD, 20);
-    case '2x2':       return genMoves(FACES_3, MODS_STD, 11);  // solo R U F (evita cara opp)
+    case '2x2':       return genMoves(FACES_2, MODS_STD, 11);   // solo R U F
     case '4x4':       return genMoves(FACES_4, MODS_STD, 40);
     case '5x5':       return genMoves(FACES_5, MODS_STD, 60);
     case '6x6':       return genMoves(FACES_6, MODS_STD, 80);
     case '7x7':       return genMoves(FACES_7, MODS_STD, 100);
     case '3x3OH':     return genMoves(FACES_3, MODS_STD, 20);
-    case '3x3 Blind': return genMoves(FACES_3, MODS_STD, 20);
+    case '3x3 Blind': return genMoves(FACES_3, MODS_STD, 20);   // mezcla 3x3 estándar
     case 'Pyraminx':  return scramblePyraminx();
     case 'Megaminx':  return scrambleMegaminx();
     case 'Clock':     return scrambleClock();
@@ -853,10 +854,18 @@ function genScramble() {
 }
 
 /* ═══════════════════════════════════════════════════
-   TIMER — con cuenta atrás, pitidos y toque en pantalla
+   TIMER
+   Estados:
+     idle       → pantalla normal, botón INICIAR visible
+     countdown  → overlay con cuenta atrás 15→0, pitidos en 7 y 3
+                  · pulsar pantalla → cancela cuenta atrás → estado 'ready'
+     ready      → overlay "TOCA PARA INICIAR"
+                  · si no se toca en 2 s → +2 durante 2 s → DNF
+                  · si se toca → arranca cronómetro → 'running'
+     running    → cronómetro en marcha, overlay oculto
+                  · pulsar cualquier zona → para → 'idle' + panel guardar
    ═══════════════════════════════════════════════════ */
 
-// Estados: 'idle' | 'countdown' | 'running'
 let timerState   = 'idle';
 let timerStart   = 0;
 let timerRAF     = null;
@@ -864,41 +873,39 @@ let lastTime_ms  = 0;
 let penalty      = 'OK';
 let countdownVal = 15;
 let countdownInt = null;
+let readyTimeout = null;   // timeout de 2 s para +2
+let dnfTimeout   = null;   // timeout de otros 2 s para DNF
 let audioCtx     = null;
 
 function getAudioCtx() {
   if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   return audioCtx;
 }
-
-function beep(freq = 880, duration = 0.12, vol = 0.4) {
+function beep(freq, dur, vol) {
   try {
     const ctx = getAudioCtx();
     const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = freq;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(vol, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + duration);
+    const g   = ctx.createGain();
+    osc.connect(g); g.connect(ctx.destination);
+    osc.frequency.value = freq; osc.type = 'sine';
+    g.gain.setValueAtTime(vol, ctx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
   } catch(_) {}
 }
 
 function checkReadyState() {
   const ready = selectedCat && playerName.length > 0;
-  const btn = document.getElementById('btn-start-stop');
-  btn.disabled = !ready;
-  document.getElementById('timer-hint').textContent =
-    ready ? 'Pulsa INICIAR, ESPACIO o toca la pantalla' :
-    (!playerName ? 'Escribe tu nombre para empezar' : 'Selecciona una categoría');
+  document.getElementById('btn-start-stop').disabled = !ready;
+  document.getElementById('timer-hint').textContent = ready
+    ? 'Pulsa INICIAR para comenzar la cuenta atrás'
+    : (!playerName ? 'Escribe tu nombre para empezar' : 'Selecciona una categoría');
 }
 
 function formatTime(ms) {
   const t = Math.abs(ms);
-  const mins = Math.floor(t / 60000);
-  const secs = Math.floor((t % 60000) / 1000);
+  const mins  = Math.floor(t / 60000);
+  const secs  = Math.floor((t % 60000) / 1000);
   const cents = Math.floor((t % 1000) / 10);
   if (mins > 0) return `${mins}:${String(secs).padStart(2,'0')}.${String(cents).padStart(2,'0')}`;
   return `${secs}.${String(cents).padStart(2,'0')}`;
@@ -909,110 +916,160 @@ function tick() {
   timerRAF = requestAnimationFrame(tick);
 }
 
-// ── Arrancar cuenta atrás ──────────────────────────
-function startCountdown() {
+// ── helpers overlay ───────────────────────────────
+function showOverlay(number, label, color) {
+  const ov  = document.getElementById('countdown-overlay');
+  const num = document.getElementById('countdown-number');
+  const lbl = document.getElementById('countdown-label');
+  num.textContent = number;
+  num.style.color = color || 'var(--text)';
+  lbl.textContent = label;
+  ov.style.display = 'flex';
+}
+function hideOverlay() {
+  document.getElementById('countdown-overlay').style.display = 'none';
+}
+
+// ── BOTÓN INICIAR (único punto de entrada) ────────
+function handleTimer() {
+  if (timerState !== 'idle') return;
   if (!selectedCat || !playerName) return;
   hideSaveSection();
+  startCountdown();
+}
+
+// ── 1. CUENTA ATRÁS ──────────────────────────────
+function startCountdown() {
   timerState   = 'countdown';
   countdownVal = 15;
-
-  const overlay = document.getElementById('countdown-overlay');
-  const num     = document.getElementById('countdown-number');
-  overlay.style.display = 'flex';
-  num.textContent = countdownVal;
-  num.style.color = 'var(--text)';
-
-  document.getElementById('btn-start-stop').textContent = 'CANCELAR';
-  document.getElementById('btn-start-stop').classList.add('stop');
+  showOverlay('15', 'Toca la pantalla para cancelar', 'var(--text)');
+  document.getElementById('btn-start-stop').textContent = 'INICIAR';
+  document.getElementById('btn-start-stop').classList.remove('stop');
 
   countdownInt = setInterval(() => {
     countdownVal--;
-    num.textContent = countdownVal;
+    let color = 'var(--text)';
+    if (countdownVal <= 3) { color = 'var(--accent2)'; beep(880, 0.15, 0.4); }
+    else if (countdownVal === 7) { color = '#fbbf24'; beep(660, 0.15, 0.3); }
+    showOverlay(countdownVal, 'Toca la pantalla para cancelar', color);
 
-    if (countdownVal === 7) {
-      num.style.color = '#fbbf24';   // amarillo
-      beep(660, 0.15);
-    } else if (countdownVal === 3) {
-      num.style.color = 'var(--accent2)'; // rojo
-      beep(880, 0.15);
-    } else if (countdownVal <= 0) {
+    if (countdownVal <= 0) {
       clearInterval(countdownInt);
-      overlay.style.display = 'none';
-      startTimer();
+      enterReadyState();
     }
   }, 1000);
 }
 
-// ── Cancelar cuenta atrás ─────────────────────────
-function cancelCountdown() {
-  clearInterval(countdownInt);
-  timerState = 'idle';
-  document.getElementById('countdown-overlay').style.display = 'none';
-  document.getElementById('btn-start-stop').textContent = 'INICIAR';
-  document.getElementById('btn-start-stop').classList.remove('stop');
+// ── 2. READY (cuenta atrás terminó sin tocar) ────
+function enterReadyState() {
+  timerState = 'ready';
+  showOverlay('GO!', 'Toca la pantalla para iniciar el cronómetro', 'var(--success)');
+  beep(1100, 0.25, 0.5);
+
+  // Si no toca en 2 s → penalización +2
+  readyTimeout = setTimeout(() => {
+    timerState = 'plus2';
+    showOverlay('+2', 'Penalización +2 — toca para iniciar igualmente', 'var(--accent2)');
+    beep(330, 0.3, 0.4);
+
+    // Si no toca en otros 2 s → DNF
+    dnfTimeout = setTimeout(() => {
+      timerState = 'dnf';
+      showOverlay('DNF', 'Tiempo expirado', 'var(--accent2)');
+      beep(220, 0.5, 0.5);
+      // 1 s después volvemos a idle
+      setTimeout(() => {
+        hideOverlay();
+        timerState = 'idle';
+        document.getElementById('timer-time').textContent = '0:00.00';
+        document.getElementById('timer-hint').textContent = 'Pulsa INICIAR para comenzar la cuenta atrás';
+      }, 1500);
+    }, 2000);
+  }, 2000);
 }
 
-// ── Arrancar cronómetro ───────────────────────────
-function startTimer() {
-  timerState  = 'running';
-  timerStart  = Date.now();
+// ── 3. ARRANCAR CRONÓMETRO (toque en ready/plus2) ─
+function startTimer(penaltyFromState) {
+  clearTimeout(readyTimeout);
+  clearTimeout(dnfTimeout);
+  timerState = 'running';
+  penalty    = penaltyFromState || 'OK';
+  timerStart = Date.now();
+  hideOverlay();
   const display = document.getElementById('timer-time');
   display.className = 'running';
   display.textContent = '0.00';
-  document.getElementById('btn-start-stop').textContent = 'DETENER';
-  document.getElementById('btn-start-stop').classList.add('stop');
-  document.getElementById('timer-hint').textContent = 'Pulsa en cualquier lugar para detener';
+  document.getElementById('timer-hint').textContent = 'Toca en cualquier lugar para detener';
   timerRAF = requestAnimationFrame(tick);
 }
 
-// ── Parar cronómetro ──────────────────────────────
+// ── 4. PARAR CRONÓMETRO ───────────────────────────
 function stopTimer() {
   cancelAnimationFrame(timerRAF);
   lastTime_ms = Date.now() - timerStart;
   timerState  = 'idle';
   const display = document.getElementById('timer-time');
   display.textContent = formatTime(lastTime_ms);
-  display.className = '';
-  document.getElementById('btn-start-stop').textContent = 'INICIAR';
-  document.getElementById('btn-start-stop').classList.remove('stop');
-  document.getElementById('timer-hint').textContent = 'Pulsa INICIAR, ESPACIO o toca la pantalla';
+  display.className   = '';
+  document.getElementById('timer-hint').textContent = 'Pulsa INICIAR para comenzar la cuenta atrás';
   showSaveSection();
 }
 
-// ── Botón principal ───────────────────────────────
-function handleTimer() {
-  if (!selectedCat || !playerName) return;
-  if (timerState === 'idle')       startCountdown();
-  else if (timerState === 'countdown') cancelCountdown();
-  else if (timerState === 'running')   stopTimer();
-}
-
-// ── Click en el overlay de cuenta atrás ──────────
-function overlayClick() {
-  if (timerState === 'countdown') cancelCountdown();
-}
-
-// ── Toque / click en cualquier zona de la pantalla ─
+// ── Toque en pantalla (toda la lógica de tap) ─────
 document.addEventListener('pointerdown', e => {
-  // Ignorar si el toque es sobre un input, select, button o el overlay
-  const tag = e.target.tagName;
-  if (['INPUT','SELECT','BUTTON','A'].includes(tag)) return;
-  if (document.getElementById('countdown-overlay').contains(e.target)) return;
-  // Solo actuar si estamos en la página del cronómetro
+  // Ignorar botones, inputs, selects
+  if (['INPUT','SELECT','BUTTON','A','LABEL'].includes(e.target.tagName)) return;
+  // Solo en página cronómetro
   if (!document.getElementById('page-timer').classList.contains('active')) return;
-  if (!selectedCat || !playerName) return;
 
-  if (timerState === 'idle') startCountdown();
-  else if (timerState === 'running') stopTimer();
+  if (timerState === 'countdown') {
+    // Cancelar cuenta atrás → estado ready (listo para arrancar)
+    clearInterval(countdownInt);
+    timerState = 'ready';
+    showOverlay('GO!', 'Toca la pantalla para iniciar el cronómetro', 'var(--success)');
+    beep(880, 0.15, 0.4);
+    readyTimeout = setTimeout(() => {
+      timerState = 'plus2';
+      showOverlay('+2', 'Penalización +2 — toca para iniciar igualmente', 'var(--accent2)');
+      beep(330, 0.3, 0.4);
+      dnfTimeout = setTimeout(() => {
+        timerState = 'dnf';
+        showOverlay('DNF', 'Tiempo expirado', 'var(--accent2)');
+        beep(220, 0.5, 0.5);
+        setTimeout(() => {
+          hideOverlay();
+          timerState = 'idle';
+          document.getElementById('timer-time').textContent = '0:00.00';
+          document.getElementById('timer-hint').textContent = 'Pulsa INICIAR para comenzar la cuenta atrás';
+        }, 1500);
+      }, 2000);
+    }, 2000);
+    return;
+  }
+
+  if (timerState === 'ready') {
+    startTimer('OK');
+    return;
+  }
+
+  if (timerState === 'plus2') {
+    startTimer('+2');
+    return;
+  }
+
+  if (timerState === 'running') {
+    stopTimer();
+    return;
+  }
 });
 
-// ── Tecla espacio ────────────────────────────────
+// ── Escape cancela si está en countdown ──────────
 document.addEventListener('keydown', e => {
-  if (e.code === 'Space' && e.target.tagName !== 'INPUT' && e.target.tagName !== 'SELECT') {
-    e.preventDefault();
-    if (!document.getElementById('btn-start-stop').disabled) handleTimer();
+  if (e.code === 'Escape' && timerState === 'countdown') {
+    clearInterval(countdownInt);
+    hideOverlay();
+    timerState = 'idle';
   }
-  if (e.code === 'Escape' && timerState === 'countdown') cancelCountdown();
 });
 
 /* ═══════════════════════════════════════════════════
@@ -1057,6 +1114,7 @@ async function saveTime() {
     });
     toast('Tiempo guardado ✓','success');
     hideSaveSection();
+    penalty = 'OK';
     genScramble();
     document.getElementById('timer-time').textContent = '0:00.00';
     document.getElementById('timer-time').className = '';
